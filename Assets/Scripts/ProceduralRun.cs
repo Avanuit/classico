@@ -61,7 +61,7 @@ public class ProceduralRun : MonoBehaviour
             if (b.kind == 2 && tPoseArmsDown)
                 b.t.rotation = Quaternion.AngleAxis(armDownAngle * (b.side > 0f ? -1f : 1f), fwd) * b.t.rotation;
 
-            float ang = 0f;
+            float ang = 0f, sideAng = 0f;
             bool rightArm = b.side > 0f;
             switch (b.kind)
             {
@@ -72,15 +72,20 @@ public class ProceduralRun : MonoBehaviour
                     if (stance == 1) ang = rightArm ? -78f : -62f;          // fusil: ambos brazos al frente
                     else if (stance == 2) ang = rightArm ? -80f : -25f;     // pistola: brazo derecho extendido
                     else if (stance == 3) ang = rightArm ? -35f : sw * armSwing * 0.5f;
+                    else if (stance == 4) { ang = 0f; sideAng = rightArm ? 155f : -155f; }                 // campeón: brazos en V
+                    else if (stance == 5) { if (rightArm) ang = -165f; else { ang = 0f; sideAng = -28f; } }  // puño derecho arriba
+                    else if (stance == 6) { if (!rightArm) ang = -165f; else { ang = 0f; sideAng = 28f; } }  // puño izquierdo arriba
                     break;
                 case 3:
                     ang = -40f * k;
                     if (stance == 1) ang = rightArm ? -12f : -38f;
                     else if (stance == 2) ang = rightArm ? -6f : -30f;
                     else if (stance == 3 && rightArm) ang = -50f;
+                    else if (stance >= 4) ang = 0f;
                     break;
             }
             if (Mathf.Abs(ang) > 0.01f) b.t.rotation = Quaternion.AngleAxis(ang, right) * b.t.rotation;
+            if (Mathf.Abs(sideAng) > 0.01f) b.t.rotation = Quaternion.AngleAxis(sideAng, fwd) * b.t.rotation;
         }
     }
 }

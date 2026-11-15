@@ -16,6 +16,7 @@ public class PlayerCombat : MonoBehaviour
     public int glockMag, glockReserve, akMag, akReserve, grenades;
     public float respawnAt, invulnerableUntil;
     public int kills, deaths;
+    [HideInInspector] public int heroStance;      // 4/5/6 = poses de podio o celebración (lo escribe MatchManager/Podium)
 
     // apuntado (lo escribe PlayerController o la IA)
     [HideInInspector] public Vector3 aimPoint;
@@ -141,6 +142,7 @@ public class PlayerCombat : MonoBehaviour
         IsDead = false; health = maxHealth; equipped = ItemType.Ball;
         hasGlock = hasAK = false; glockMag = glockReserve = akMag = akReserve = grenades = 0;
         reloading = false; invulnerableUntil = 0f; kills = 0; deaths = 0;
+        heroStance = 0; hideBody = false; hideWeaponVisual = false;
         if (cc != null) cc.enabled = true;
     }
 
@@ -149,6 +151,7 @@ public class PlayerCombat : MonoBehaviour
     {
         if (IsDead) { StopAllCoroutines(); IsDead = false; if (cc != null) cc.enabled = true; }
         health = maxHealth;
+        heroStance = 0;
         invulnerableUntil = Time.time + 1f;
     }
 
@@ -462,7 +465,7 @@ public class PlayerCombat : MonoBehaviour
         ItemType want = equipped;
         if (IsDead || !HasItem(want)) want = ItemType.Ball;
         if (want != shownType) RebuildWeapon(want);
-        if (run != null) run.stance = want == ItemType.Ball ? 0 : (want == ItemType.AK47 ? 1 : (want == ItemType.Glock ? 2 : 3));
+        if (run != null) run.stance = heroStance > 0 ? heroStance : (want == ItemType.Ball ? 0 : (want == ItemType.AK47 ? 1 : (want == ItemType.Glock ? 2 : 3)));
         if (weaponObj != null)
         {
             bool show = !hideWeaponVisual;

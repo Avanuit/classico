@@ -156,6 +156,7 @@ public class MatchSetup : MonoBehaviour
         }
         if (go.GetComponent<BallSetup>() == null) go.AddComponent<BallSetup>();
         if (go.GetComponent<BallSfx>() == null) go.AddComponent<BallSfx>();
+        if (go.GetComponent<BallFx>() == null) go.AddComponent<BallFx>();
         return go.transform;
     }
 

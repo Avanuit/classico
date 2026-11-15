@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public enum MatchState { Menu, Playing, Goal, SetPiece, Finished }
+public enum MatchState { Menu, Intro, Playing, Goal, SetPiece, Finished }
 public enum SetPieceType { KickOff, ThrowIn, Corner, GoalKick }
 
 // Árbitro del partido: posesión, goles, fuera de juego (saques de banda, esquinas, saques de meta),
@@ -60,6 +60,15 @@ public class MatchManager : MonoBehaviour
     public PlayerAI[] Cover = new PlayerAI[2];
     public float MatchTime;
 
+    // ---- intro de lore, cuenta atrás y final de partido
+    public const float CountdownStart = 14.8f, IntroEnd = 17.8f;
+    public float IntroTime { get { return Time.time - introStart; } }
+    public int CountdownNumber;
+    public float FinishTime;
+    public float TimeLeft { get { return Mathf.Max(0f, matchLengthSeconds - MatchTime); } }
+    float introStart, slowUntil;
+    int lastCountdown = -1, lastTimeWarn = -1;
+
     float passUntil, nextRoles, goalTimer, setStart, arrivedAt;
     int concedingTeam;
 
@@ -73,36 +82,43 @@ public class MatchManager : MonoBehaviour
         Teams[0] = a; Teams[1] = b;
         Ball = ball; BallRb = ball.GetComponent<Rigidbody>();
         HL = hl; HW = hw;
+        GameSettings.Load();
+        GameSettings.Apply();
+        matchLengthSeconds = GameSettings.MatchMinutes * 60f;      // el tiempo límite se elige en Ajustes
         if (GetComponent<MatchHUD>() == null) gameObject.AddComponent<MatchHUD>();
         if (GetComponent<Fx>() == null) gameObject.AddComponent<Fx>();
         if (GetComponent<WeaponTuning>() == null) gameObject.AddComponent<WeaponTuning>();
         if (GetComponent<PickupSpawner>() == null) gameObject.AddComponent<PickupSpawner>();
-        ShowMenu();
+        if (GameSession.HasChoice) StartMatch(GameSession.Team); else ShowMenu();
     }
 
     void OnDestroy() { Time.timeScale = 1f; AudioListener.pause = false; if (I == this) I = null; }
 
     public void ResetMatch()
     {
+        CleanupPodium();
         RestoreBall();
         Score[0] = 0; Score[1] = 0; MatchTime = 0f;
         ResetCombat();
         BeginKickOff(PickKickoffTeam(0));
+        if (GameAudio.I != null) GameAudio.I.PlayMusic(MusicTrack.Match);
     }
 
     // ---------------------------------------------------------------- bucle
     void Update()
     {
         if (Ball == null) return;
-        if (Input.GetKeyDown(KeyCode.Escape) && State != MatchState.Menu) SetPaused(!Paused);
+        if (slowUntil > 0f && Time.unscaledTime > slowUntil) { slowUntil = 0f; if (!Paused) Time.timeScale = 1f; }
+        if (Input.GetKeyDown(KeyCode.Escape) && State != MatchState.Menu && State != MatchState.Intro && State != MatchState.Finished) SetPaused(!Paused);
         if (Paused) return;
-        if (Input.GetKeyDown(KeyCode.M) && State != MatchState.Menu) { ShowMenu(); return; }
-        if (Input.GetKeyDown(KeyCode.F5) && State != MatchState.Menu) { ResetMatch(); return; }
+        if (Input.GetKeyDown(KeyCode.M) && State != MatchState.Menu && State != MatchState.Intro) { GoToMainMenu(); return; }
+        if (Input.GetKeyDown(KeyCode.F5) && State != MatchState.Menu && State != MatchState.Intro && State != MatchState.Finished) { ResetMatch(); return; }
 
         switch (State)
         {
             case MatchState.Playing: UpdatePlaying(); break;
             case MatchState.SetPiece: UpdateSetPiece(); break;
+            case MatchState.Intro: UpdateIntro(); break;
             case MatchState.Menu: Ball.Rotate(new Vector3(18f, 50f, 7f) * Time.deltaTime, Space.World); break;
             case MatchState.Goal:
                 goalTimer -= Time.deltaTime;
@@ -121,6 +137,12 @@ public class MatchManager : MonoBehaviour
     {
         MatchTime += Time.deltaTime;
         if (MatchTime >= matchLengthSeconds) { Finish(); return; }
+        int left = Mathf.CeilToInt(TimeLeft);
+        if (left <= 10 && left > 0 && left != lastTimeWarn)
+        {
+            lastTimeWarn = left;
+            if (GameAudio.I != null) GameAudio.I.CountdownTick(false);
+        }
 
         Vector3 b = Ball.position;
         if (Mathf.Abs(b.x) > HL) { OnGoalLine(b); return; }
@@ -135,10 +157,13 @@ public class MatchManager : MonoBehaviour
     void Finish()
     {
         State = MatchState.Finished;
-        Holder = null; PassTarget = null;
-        if (GameAudio.I != null) GameAudio.I.Whistle(3, false);
-        MatchHUD.Show("FIN DEL PARTIDO\n" + TeamNames[0] + " " + Score[0] + " - " + Score[1] + " " + TeamNames[1],
-                      new Color(0.1f, 0.1f, 0.1f), 9999f);
+        Holder = null; PassTarget = null; UserTakesSetPiece = false;
+        FinishTime = Time.time;
+        Time.timeScale = 1f; slowUntil = 0f;
+        if (GameAudio.I != null) { GameAudio.I.Whistle(3, false); GameAudio.I.PlayMusic(MusicTrack.Victory, 1.6f); }
+        MatchHUD.Show("", Color.black, 0f);
+        Podium.Build(this);
+        ScreenOverlay.FadeFromBlack(0.9f);
     }
 
     // ---------------------------------------------------------------- posesión
@@ -278,6 +303,14 @@ public class MatchManager : MonoBehaviour
         if (GameAudio.I != null) GameAudio.I.Goal();
         State = MatchState.Goal;
         goalTimer = 4.5f;
+        Time.timeScale = 0.35f; slowUntil = Time.unscaledTime + 1.4f;                    // cámara lenta en el gol
+        for (int i = 0; i < Teams[attTeam].Count; i++)
+        {
+            PlayerCombat cel = Teams[attTeam][i].Combat;
+            if (cel != null && !cel.IsDead) cel.heroStance = 4;                          // celebran con los brazos arriba
+        }
+        Fx.Confetti(new Vector3(Mathf.Sign(Ball.position.x) * HL, 3f, 0f), 140);
+        if (PlayerController.I != null) PlayerController.I.Shake(0.8f);
         concedingTeam = 1 - attTeam;
         Holder = null; PassTarget = null;
         MatchHUD.Show("¡GOOOL DE " + TeamNames[attTeam] + "!\n" + Score[0] + " - " + Score[1],
@@ -321,6 +354,8 @@ public class MatchManager : MonoBehaviour
     // Pantalla de selección de equipo (la dibuja MatchHUD)
     public void ShowMenu()
     {
+        CleanupPodium();
+        if (GameAudio.I != null) GameAudio.I.PlayMusic(MusicTrack.Menu, 1.2f);
         SetPaused(false);
         State = MatchState.Menu;
         UserTeam = -1; UserTakesSetPiece = false;
@@ -470,7 +505,78 @@ public class MatchManager : MonoBehaviour
     public void StartMatch(int team)
     {
         UserTeam = team;
+        BeginIntro();
+    }
+
+    // ---- intro cinematográfica (lore) + cuenta atrás 3-2-1
+    public void BeginIntro()
+    {
+        SetPaused(false);
+        CleanupPodium();
+        RestoreBall();
+        Score[0] = 0; Score[1] = 0; MatchTime = 0f;
+        ResetCombat();
+        Holder = null; PassTarget = null; Taker = null; UserTakesSetPiece = false;
+        PlaceKickoffFormation(0);
+        BallRb.isKinematic = false;
+        BallRb.velocity = Vector3.zero;
+        BallRb.angularVelocity = Vector3.zero;
+        BallRb.isKinematic = true;
+        Ball.position = new Vector3(0f, 0.12f, 0f);
+        MatchHUD.Show("", Color.black, 0f);
+        State = MatchState.Intro;
+        introStart = Time.time;
+        CountdownNumber = 0; lastCountdown = -1; lastTimeWarn = -1;
+        if (GameAudio.I != null) GameAudio.I.PlayMusic(MusicTrack.Intro, 1.5f);
+        ScreenOverlay.FadeFromBlack(1f);
+    }
+
+    void UpdateIntro()
+    {
+        float t = IntroTime;
+        if (t < CountdownStart && t > 0.5f && Input.anyKeyDown) { introStart = Time.time - CountdownStart; t = CountdownStart; }   // saltar
+        if (t >= CountdownStart)
+        {
+            CountdownNumber = Mathf.Clamp(3 - Mathf.FloorToInt(t - CountdownStart), 1, 3);
+            if (CountdownNumber != lastCountdown)
+            {
+                lastCountdown = CountdownNumber;
+                if (GameAudio.I != null) GameAudio.I.CountdownTick(false);
+            }
+        }
+        if (t >= IntroEnd)
+        {
+            CountdownNumber = 0;
+            if (GameAudio.I != null) { GameAudio.I.CountdownTick(true); GameAudio.I.PlayMusic(MusicTrack.Match, 1.2f); }
+            ScreenOverlay.FadeFromBlack(0.5f);
+            BeginKickOff(PickKickoffTeam(0));
+        }
+    }
+
+    // ---- final: revancha, cambiar de equipo, menú principal
+    void CleanupPodium()
+    {
+        Podium.Clear();
+        if (!Paused && Time.timeScale == 0f) Time.timeScale = 1f;
+    }
+
+    public void Rematch()
+    {
+        ScreenOverlay.FadeFromBlack(0.6f);
         ResetMatch();
+    }
+
+    public void ChangeTeam() { ShowMenu(); }
+
+    public void GoToMainMenu()
+    {
+        CleanupPodium();
+        if (GameSession.MenuAvailable)
+        {
+            GameSession.HasChoice = false;
+            ScreenOverlay.LoadScene(GameSession.MenuScene);
+        }
+        else ShowMenu();
     }
 
     void BeginSetPiece(SetPieceType type, int team, Vector3 spot, string label, PlayerAI takerOverride)

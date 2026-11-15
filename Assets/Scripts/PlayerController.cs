@@ -87,6 +87,9 @@ public class PlayerController : MonoBehaviour
 
     public bool IsUser(PlayerCombat pc) { return pc != null && Controlled != null && pc.AI == Controlled; }
 
+    float shake;
+    public void Shake(float amount) { shake = Mathf.Max(shake, Mathf.Clamp01(amount)); }
+
     public void AddRecoil(float deg)
     {
         pitch = Mathf.Clamp(pitch - deg, minPitch, maxPitch);
@@ -111,9 +114,9 @@ public class PlayerController : MonoBehaviour
         MatchManager m = MatchManager.I;
         if (m == null) return;
 
-        if (m.State == MatchState.Menu || m.UserTeam < 0)
+        if (m.State == MatchState.Menu || m.State == MatchState.Intro || m.State == MatchState.Finished || m.UserTeam < 0)
         {
-            SetCursor(false);
+            SetCursor(m.State == MatchState.Intro);
             ReleaseControl();
             chargingButton = -1; ChargePower = 0f; Ads = false; firstPerson = false;
             lastUserTeam = -2;
@@ -408,6 +411,8 @@ public class PlayerController : MonoBehaviour
             marker.SetActive(!firstPerson || Combat == null || Combat.IsDead);
         }
 
+        if (m.State == MatchState.Intro) { IntroCamera(m); return; }
+        if (m.State == MatchState.Finished) { PodiumCamera(m, dt); return; }
         if (m.State == MatchState.Menu) { OrbitMenu(m, dt); return; }
         if (m.UserTeam < 0 || Controlled == null) { Spectator(m, dt); return; }
 
@@ -455,6 +460,51 @@ public class PlayerController : MonoBehaviour
         AimPoint = ComputeAimPoint();
         AimDir = ComputeAimDir();
         UpdatePreview(m);
+
+        if (shake > 0.001f)        // sacudida (explosiones, goles): no afecta la puntería
+        {
+            cam.transform.position += Random.insideUnitSphere * shake * 0.12f;
+            cam.transform.rotation *= Quaternion.Euler(Random.insideUnitSphere * shake * 1.2f);
+            shake = Mathf.MoveTowards(shake, 0f, dt * 2.2f);
+        }
+    }
+
+    // ---- cámara de la intro: vuelo sobre la cancha y empuje durante la cuenta atrás
+    static readonly Vector3[] introPos =
+    {
+        new Vector3(-46f, 20f, -22f), new Vector3(-20f, 11f, -30f), new Vector3(14f, 5f, -26f), new Vector3(-8f, 2.2f, -9f)
+    };
+    static readonly Vector3[] introLook = { new Vector3(0f, 1f, 0f), new Vector3(0f, 1.5f, 0f), new Vector3(-4f, 1.5f, 0f), new Vector3(0f, 1.4f, 0f) };
+    static readonly float[] introT = { 0f, 4.5f, 9.5f, 14.8f };
+    static readonly float[] introFov = { 55f, 48f, 42f, 40f };
+
+    void IntroCamera(MatchManager m)
+    {
+        float t = Mathf.Min(m.IntroTime, MatchManager.IntroEnd);
+        int k = 0;
+        while (k < 2 && t > introT[k + 1]) k++;
+        float u = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(introT[k], introT[k + 1], t));
+        Vector3 pos = Vector3.Lerp(introPos[k], introPos[k + 1], u);
+        Vector3 look = Vector3.Lerp(introLook[k], introLook[k + 1], u);
+        float fov = Mathf.Lerp(introFov[k], introFov[k + 1], u);
+        if (t > introT[3]) pos = introPos[3] + (introLook[3] - introPos[3]).normalized * (t - introT[3]) * 0.6f;   // empuje lento
+        cam.fieldOfView = fov;
+        cam.transform.position = pos;
+        cam.transform.rotation = Quaternion.LookRotation(look - pos, Vector3.up);
+    }
+
+    // ---- cámara del podio: órbita lenta a baja altura (contrapicado de héroes)
+    void PodiumCamera(MatchManager m, float dt)
+    {
+        Vector3 c = Podium.I != null ? Podium.I.Center : Vector3.zero;
+        float t = Time.time - m.FinishTime;
+        float swing = Mathf.Sin(t * 0.45f) * 38f;
+        float R = Mathf.Lerp(15f, 8.5f, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t / 3f))) + Mathf.Sin(t * 0.25f);
+        Vector3 pos = c + Quaternion.Euler(0f, swing, 0f) * new Vector3(-R, 0f, 0f) + Vector3.up * (1.1f + 0.5f * Mathf.Sin(t * 0.3f));
+        Vector3 look = c + Vector3.up * 1.5f;
+        cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, 36f, Mathf.Clamp01(3f * dt));
+        cam.transform.position = pos;
+        cam.transform.rotation = Quaternion.LookRotation(look - pos, Vector3.up);
     }
 
     // arma en primera persona (modelo pegado a la cámara)

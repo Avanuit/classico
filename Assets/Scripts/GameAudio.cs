@@ -11,7 +11,9 @@ using UnityEngine;
 public class GameAudio : MonoBehaviour
 {
     public static GameAudio I;
-    public static float AmbientLevel = 1f;          // slider "Ambiente" del menú (0 = sin viento ni grada)
+    public static float AmbientLevel = 1f;
+    public static float SfxLevel = 1f;              // slider "Efectos"
+    const float MusicBase = 0.55f;          // slider "Ambiente" del menú (0 = sin viento ni grada)
 
     const int Rate = 22050;
     const float TwoPi = 6.2831853f;
@@ -20,6 +22,13 @@ public class GameAudio : MonoBehaviour
 
     AudioClip kick, stepA, stepB, stepC, wind, crowd, roar, whistleShort, whistleLong, bounce, impact;
     AudioClip shotAK, shotGlock, explosion, pickup, hitTick, killTick, reload, hurt;
+    AudioClip uiHover, uiClick, countTick, goBeep;
+
+    // ---- música (con fundido entre pistas)
+    readonly AudioClip[] musicClips = new AudioClip[5];
+    AudioSource musicA, musicB, fadeFrom, fadeTo;
+    MusicTrack currentTrack = MusicTrack.None;
+    float musicFade = 1f, musicFadeSpeed = 1f, fromStart;
     float whistleShortLen = 0.38f, whistleLongLen = 0.8f;
     readonly AudioSource[] pool = new AudioSource[16];
     readonly AudioSource[] stepPool = new AudioSource[8];
@@ -57,6 +66,16 @@ public class GameAudio : MonoBehaviour
         reload = Load("reload", MakeReload());
         hurt = Load("hurt", MakeHurt());
 
+        uiHover = Load("ui_hover", MakeTick(2400f));
+        uiClick = Load("ui_click", MakeClick());
+        countTick = MakeBeep(880f, 0.16f);
+        goBeep = MakeBeep(1320f, 0.5f);
+        musicA = MakeSource("musicA"); musicB = MakeSource("musicB");
+        foreach (AudioSource ms in new AudioSource[] { musicA, musicB })
+        {
+            ms.loop = true; ms.spatialBlend = 0f; ms.volume = 0f; ms.ignoreListenerPause = true;
+        }
+
         for (int i = 0; i < pool.Length; i++) pool[i] = MakeSource("sfx" + i);
         for (int i = 0; i < stepPool.Length; i++) stepPool[i] = MakeSource("step" + i);
 
@@ -68,6 +87,7 @@ public class GameAudio : MonoBehaviour
 
     void Update()
     {
+        UpdateMusic();
         windSrc.volume = WindBase * AmbientLevel;
         float target = (Time.time < crowdBoostUntil ? 0.30f : CrowdBase) * AmbientLevel;
         crowdSrc.volume = Mathf.Lerp(crowdSrc.volume, target, 3f * Time.unscaledDeltaTime);
@@ -102,6 +122,64 @@ public class GameAudio : MonoBehaviour
         Play(Next(pool, ref poolIdx), roar, Vector3.zero, 0.9f, 1f, 0f);
         crowdBoostUntil = Time.time + 4.5f;
         Whistle(1, true, 1.1f);
+    }
+
+    // ---- interfaz y música
+    public void UiHover() { Play(Next(pool, ref poolIdx), uiHover, Vector3.zero, 0.35f, 1f, 0f); }
+    public void UiClick() { Play(Next(pool, ref poolIdx), uiClick, Vector3.zero, 0.6f, 1f, 0f); }
+    public void CountdownTick(bool go) { Play(Next(pool, ref poolIdx), go ? goBeep : countTick, Vector3.zero, 0.6f, 1f, 0f); }
+
+    public void PlayMusic(MusicTrack t, float fade = 1.2f)
+    {
+        if (t == currentTrack) return;
+        currentTrack = t;
+        AudioClip c = t == MusicTrack.None ? null : GetMusic(t);
+        AudioSource from = fadeTo != null ? fadeTo : musicA;
+        AudioSource to = from == musicA ? musicB : musicA;
+        fadeFrom = from; fadeTo = to;
+        fromStart = from.volume;
+        to.Stop();
+        to.clip = c;
+        to.volume = 0f;
+        if (c != null) to.Play();
+        musicFade = 0f;
+        musicFadeSpeed = 1f / Mathf.Max(0.05f, fade);
+    }
+
+    AudioClip GetMusic(MusicTrack t)
+    {
+        int i = (int)t;
+        if (musicClips[i] == null)
+        {
+            string n = t == MusicTrack.Menu ? "music_menu" : (t == MusicTrack.Intro ? "music_intro" : (t == MusicTrack.Match ? "music_match" : "music_victory"));
+            AudioClip c = Resources.Load<AudioClip>("Audio/" + n);
+            musicClips[i] = c != null ? c : MusicSynth.Make(t);
+        }
+        return musicClips[i];
+    }
+
+    float MusicTarget()
+    {
+        float duck = (MatchManager.I != null && MatchManager.I.Paused) ? 0.45f : 1f;
+        return MusicBase * GameSettings.Music * duck;
+    }
+
+    public void RefreshMusicVolume()
+    {
+        if (fadeTo != null && musicFade >= 1f) fadeTo.volume = MusicTarget();
+    }
+
+    void UpdateMusic()
+    {
+        if (fadeTo == null) return;
+        musicFade = Mathf.Min(1f, musicFade + musicFadeSpeed * Time.unscaledDeltaTime);
+        float target = MusicTarget();
+        fadeTo.volume = Mathf.Lerp(0f, target, musicFade);
+        if (fadeFrom != null && fadeFrom != fadeTo)
+        {
+            fadeFrom.volume = Mathf.Lerp(fromStart, 0f, musicFade);
+            if (musicFade >= 1f && fadeFrom.isPlaying) fadeFrom.Stop();
+        }
     }
 
     // ---- combate
@@ -163,7 +241,7 @@ public class GameAudio : MonoBehaviour
         if (s == null || c == null) return;
         s.transform.position = pos;
         s.clip = c;
-        s.volume = Mathf.Clamp01(vol);
+        s.volume = Mathf.Clamp01(vol * SfxLevel);
         s.pitch = pitch;
         s.spatialBlend = spatial;
         s.Play();
@@ -396,6 +474,26 @@ public class GameAudio : MonoBehaviour
             lp += 0.15f * (N() - lp);
             p += TwoPi * 140f / Rate;
             return (lp * 2f + Mathf.Sin(p) * 0.5f) * Mathf.Exp(-t * 14f) * Mathf.Clamp01(t / 0.005f);
+        });
+    }
+
+    static AudioClip MakeClick()
+    {
+        float p = 0f;
+        return Make("click", 0.12f, t =>
+        {
+            p += TwoPi * (t < 0.04f ? 900f : 1350f) / Rate;
+            return Mathf.Sin(p) * Mathf.Exp(-(t % 0.04f) * 70f) * Mathf.Exp(-t * 6f);
+        });
+    }
+
+    static AudioClip MakeBeep(float hz, float len)
+    {
+        float p = 0f;
+        return Make("beep", len, t =>
+        {
+            p += TwoPi * hz / Rate;
+            return (Mathf.Sin(p) + 0.3f * Mathf.Sin(p * 2f)) * Mathf.Clamp01(t / 0.005f) * Mathf.Exp(-t * 7f);
         });
     }
 

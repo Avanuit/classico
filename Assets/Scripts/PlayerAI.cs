@@ -122,7 +122,7 @@ public class PlayerAI : MonoBehaviour
 
         if (IsDead) { Velocity = Vector3.zero; UpdateAnimator(); return; }
 
-        if (m.State == MatchState.Goal || m.State == MatchState.Finished || m.State == MatchState.Menu)
+        if (m.State == MatchState.Goal || m.State == MatchState.Finished || m.State == MatchState.Menu || m.State == MatchState.Intro)
         {
             MoveTo(transform.position, 0f, dt);
             UpdateAnimator();

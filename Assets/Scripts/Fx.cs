@@ -72,9 +72,59 @@ public class Fx : MonoBehaviour
         }
     }
 
+    // confeti: ráfaga puntual (gol) o continuo (podio). rate > 0 = continuo.
+    public static ParticleSystem CreateConfetti(Vector3 pos, Vector3 box, float rate, float life)
+    {
+        GameObject go = new GameObject("Confeti");
+        go.transform.position = pos;
+        go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);       // la caja emite hacia abajo
+        ParticleSystem ps = go.AddComponent<ParticleSystem>();
+        ParticleSystem.MainModule m = ps.main;
+        m.loop = rate > 0f;
+        m.playOnAwake = rate > 0f;
+        m.startLifetime = new ParticleSystem.MinMaxCurve(life * 0.7f, life);
+        m.startSpeed = new ParticleSystem.MinMaxCurve(0.5f, 3f);
+        m.startSize = new ParticleSystem.MinMaxCurve(0.12f, 0.24f);
+        m.gravityModifier = 0.3f;
+        m.maxParticles = 700;
+        m.simulationSpace = ParticleSystemSimulationSpace.World;
+        Gradient g = new Gradient();
+        g.SetKeys(new GradientColorKey[]
+        {
+            new GradientColorKey(new Color(0.2f, 0.45f, 1f), 0f), new GradientColorKey(new Color(0.25f, 0.9f, 0.45f), 0.33f),
+            new GradientColorKey(Color.white, 0.66f), new GradientColorKey(new Color(1f, 0.82f, 0.25f), 1f)
+        }, new GradientAlphaKey[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 1f) });
+        ParticleSystem.MinMaxGradient mg = new ParticleSystem.MinMaxGradient(g);
+        mg.mode = ParticleSystemGradientMode.RandomColor;
+        m.startColor = mg;
+        ParticleSystem.EmissionModule e = ps.emission;
+        e.rateOverTime = rate;
+        ParticleSystem.ShapeModule sh = ps.shape;
+        sh.shapeType = ParticleSystemShapeType.Box;
+        sh.scale = box;
+        ParticleSystem.RotationOverLifetimeModule rot = ps.rotationOverLifetime;
+        rot.enabled = true;
+        rot.z = new ParticleSystem.MinMaxCurve(-3f, 3f);
+        Material mat = new Material(Shader.Find("Sprites/Default"));
+        go.GetComponent<ParticleSystemRenderer>().sharedMaterial = mat;
+        return ps;
+    }
+
+    public static void Confetti(Vector3 pos, int count)
+    {
+        ParticleSystem ps = CreateConfetti(pos, new Vector3(8f, 3f, 0.2f), 0f, 4f);
+        ps.Emit(count);
+        Object.Destroy(ps.gameObject, 8f);
+    }
+
     public static void Explosion(Vector3 p, float radius)
     {
         if (I == null) return;
+        if (PlayerController.I != null)
+        {
+            float d = Vector3.Distance(Camera.main != null ? Camera.main.transform.position : p, p);
+            PlayerController.I.Shake(Mathf.Clamp01(1.2f - d / 30f));
+        }
         Item fire = NewShape(PrimitiveType.Sphere, p, 0.4f, radius * 1.7f, new Color(1f, 0.55f, 0.15f, 0.85f), 0.45f, Vector3.zero);
         GameObject lg = new GameObject("luz");
         lg.transform.SetParent(fire.go.transform, false);
@@ -118,5 +168,32 @@ public class Fx : MonoBehaviour
             it.r.SetPropertyBlock(mpb);
             if (it.light != null) it.light.intensity = it.light0 * (1f - u);
         }
+    }
+}
+
+// Estela blanca del balón cuando va rápido (tiros potentes)
+public class BallFx : MonoBehaviour
+{
+    TrailRenderer tr;
+    Rigidbody rb;
+
+    void Start()
+    {
+        rb = GetComponent<Rigidbody>();
+        tr = gameObject.AddComponent<TrailRenderer>();
+        tr.time = 0.25f;
+        tr.startWidth = 0.14f;
+        tr.endWidth = 0f;
+        tr.material = new Material(Shader.Find("Sprites/Default"));
+        tr.startColor = new Color(1f, 1f, 1f, 0.55f);
+        tr.endColor = new Color(1f, 1f, 1f, 0f);
+        tr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        tr.emitting = false;
+    }
+
+    void Update()
+    {
+        if (tr == null || rb == null) return;
+        tr.emitting = !rb.isKinematic && rb.velocity.magnitude > 11f;
     }
 }
