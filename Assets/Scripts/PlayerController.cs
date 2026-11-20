@@ -140,6 +140,14 @@ public class PlayerController : MonoBehaviour
             HidePreview();
             return;
         }
+        if (AnimTunerHUD.Open)       // el panel de animaciones (F1) necesita el cursor libre
+        {
+            SetCursor(false);
+            Drive(Vector3.zero, false, Vector3.zero);
+            chargingButton = -1; ChargePower = 0f;
+            HidePreview();
+            return;
+        }
         SetCursor(true);
         UpdateControlled(m);
 
@@ -218,6 +226,11 @@ public class PlayerController : MonoBehaviour
     // ---- fútbol
     void HandleFootball(MatchManager m)
     {
+        if (Controlled != null && m.State == MatchState.Playing)
+        {
+            if (Input.GetKeyDown(KeyCode.Space)) Controlled.TryJump(AimDir);          // saltar / cabecear hacia la mira
+            if (Input.GetKeyDown(KeyCode.E)) Controlled.TrySlideTackle();             // barrida
+        }
         if (chargingButton < 0)
         {
             ChargePower = 0f;
@@ -413,7 +426,7 @@ public class PlayerController : MonoBehaviour
 
         if (m.State == MatchState.Intro) { IntroCamera(m); return; }
         if (m.State == MatchState.Finished) { PodiumCamera(m, dt); return; }
-        if (m.State == MatchState.Menu) { OrbitMenu(m, dt); return; }
+        if (m.State == MatchState.Menu) { MenuShowcase.UpdateCamera(cam, dt); return; }
         if (m.UserTeam < 0 || Controlled == null) { Spectator(m, dt); return; }
 
         PlayerCombat cb = Combat;
@@ -434,8 +447,9 @@ public class PlayerController : MonoBehaviour
         {
             Vector3 head = Controlled.transform.position + Vector3.up * (Controlled.playerHeight * 0.93f);
             Quaternion r = Quaternion.Euler(pitch, yaw, 0f);
-            cam.transform.position = head + r * Vector3.forward * 0.12f;
-            cam.transform.rotation = r;
+            UpdateFpMotion(cb, dt);
+            cam.transform.position = head + r * (Vector3.forward * 0.12f + fpCamBob);      // la cabeza sube y baja al correr
+            cam.transform.rotation = r * Quaternion.Euler(0f, 0f, fpCamRoll);
             UpdateViewModel(cb, true);
             if (cb != null)
                 cb.overrideMuzzle = viewMuzzle != null ? viewMuzzle.position : cam.transform.position + cam.transform.forward * 0.6f;
@@ -517,13 +531,53 @@ public class PlayerController : MonoBehaviour
             DestroyViewModel();
             viewModel = WeaponModels.Build(eq, out viewMuzzle);
             viewModel.transform.SetParent(cam.transform, false);
+            MatchManager mm = MatchManager.I;
+            Color sleeve = mm != null && mm.UserTeam >= 0 ? mm.TeamColors[mm.UserTeam] : Color.white;
+            WeaponMeshes.CreateFPArms(eq, viewModel.transform, sleeve);
+            foreach (Renderer r in viewModel.GetComponentsInChildren<Renderer>()) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             viewType = eq;
+            vmBase = eq == ItemType.AK47 ? new Vector3(0.22f, -0.2f, 0.5f) : new Vector3(0.18f, -0.18f, 0.38f);
         }
-        Vector3 hip = eq == ItemType.AK47 ? new Vector3(0.22f, -0.2f, 0.5f)
-                    : (eq == ItemType.Glock ? new Vector3(0.16f, -0.14f, 0.38f) : new Vector3(0.18f, -0.18f, 0.38f));
-        Vector3 aim = eq == ItemType.Grenade ? hip : new Vector3(0f, -0.115f, 0.46f);
-        viewModel.transform.localPosition = Vector3.Lerp(viewModel.transform.localPosition, Ads ? aim : hip, Mathf.Clamp01(14f * Time.deltaTime));
-        viewModel.transform.localRotation = Quaternion.Euler(WeaponModels.Euler(eq));
+        Vector3 hip = eq == ItemType.AK47 ? new Vector3(0.2f, -0.19f, 0.42f)
+                    : (eq == ItemType.Glock ? new Vector3(0.15f, -0.14f, 0.34f) : new Vector3(0.17f, -0.17f, 0.36f));
+        // apuntar: la línea de miras del modelo queda en el centro de la pantalla
+        Vector3 aim = eq == ItemType.AK47 ? new Vector3(0f, -0.064f, 0.3f)
+                    : (eq == ItemType.Glock ? new Vector3(0f, -0.053f, 0.3f) : hip);
+        vmBase = Vector3.Lerp(vmBase, Ads ? aim : hip, Mathf.Clamp01(14f * Time.deltaTime));
+
+        // correr: lleva el arma cruzada y baja · recargar: inclina el arma y la baja · balanceo al moverse y al mirar
+        float rl = cb.IsReloading ? Mathf.Sin(cb.ReloadProgress * Mathf.PI) : 0f;
+        float sp = vmSprint;
+        Vector3 off = fpGunBob * (Ads ? 0.25f : 1f)
+                    + new Vector3(-0.06f, -0.05f, -0.05f) * sp
+                    + new Vector3(-0.02f, -0.07f, -0.03f) * rl;
+        Quaternion rot = Quaternion.Euler(WeaponModels.Euler(eq))
+                       * Quaternion.Euler(vmSway.y + 10f * sp - 20f * rl, vmSway.x - 32f * sp + 8f * rl, 18f * sp + 38f * rl);
+        viewModel.transform.localPosition = vmBase + off;
+        viewModel.transform.localRotation = rot;
+    }
+
+    // ---- movimiento en primera persona (pasos, sprint, balanceo)
+    Vector3 vmBase, fpCamBob, fpGunBob;
+    Vector2 vmSway;
+    float fpPhase, fpCamRoll, vmSprint;
+
+    void UpdateFpMotion(PlayerCombat cb, float dt)
+    {
+        Vector3 v = Controlled != null ? Controlled.Velocity : Vector3.zero; v.y = 0f;
+        float spd = v.magnitude;
+        bool sprinting = Controlled != null && Controlled.userSprint && spd > 3f && !Ads && (cb == null || !cb.IsReloading) && chargingButton < 0;
+        vmSprint = Mathf.MoveTowards(vmSprint, sprinting ? 1f : 0f, dt * 5f);
+        float k = Mathf.Clamp01(spd / 6.5f);
+        if (Controlled != null && Controlled.Airborne) k = 0f;
+        fpPhase += dt * Mathf.Lerp(5.5f, 11f, k) * (spd > 0.4f ? 1f : 0.25f);
+        float s = Mathf.Sin(fpPhase), c = Mathf.Cos(fpPhase);
+        float breathe = Mathf.Sin(Time.time * 1.6f) * 0.0018f;
+        fpCamBob = new Vector3(s * 0.025f * k, -Mathf.Abs(c) * 0.04f * k, 0f) * (Ads ? 0.35f : 1f);
+        fpCamRoll = s * 0.8f * k;
+        fpGunBob = new Vector3(s * 0.014f * k, -Mathf.Abs(c) * 0.016f * k + breathe, 0f);
+        Vector2 look = new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y"));
+        vmSway = Vector2.Lerp(vmSway, new Vector2(Mathf.Clamp(-look.x * 2.5f, -5f, 5f), Mathf.Clamp(look.y * 2.5f, -5f, 5f)), Mathf.Clamp01(8f * dt));
     }
 
     void DestroyViewModel()

@@ -10,12 +10,15 @@ public class ProceduralRun : MonoBehaviour
     [HideInInspector] public int stance;      // 0 libre, 1 fusil, 2 pistola, 3 granada (lo escribe PlayerCombat)
     [Tooltip("Actívalo si el modelo está en T-pose (brazos extendidos a los lados)")]
     public bool tPoseArmsDown = false;
+    [Tooltip("Lo activa MixamoAnimator: las piernas las anima Mixamo y aquí solo se colocan los brazos (armas, poses)")]
+    public bool armsOnly = false;
     public float armDownAngle = 70f;
     public float legSwing = 45f, armSwing = 35f, kneeBend = 55f, cadence = 3.1f;
 
     class Bone { public Transform t; public Quaternion initLocal; public int kind; public float side; }
     readonly List<Bone> bones = new List<Bone>();
     float phase;
+    public bool Ready { get; private set; }
     Animator anim;
 
     void Start()
@@ -38,6 +41,7 @@ public class ProceduralRun : MonoBehaviour
             bones.Add(b);
         }
         if (bones.Count == 0) Debug.LogWarning("ProceduralRun: no encontré huesos de piernas/brazos en " + name);
+        Ready = true;
     }
 
     void LateUpdate()
@@ -54,6 +58,7 @@ public class ProceduralRun : MonoBehaviour
         for (int i = 0; i < bones.Count; i++)
         {
             Bone b = bones[i];
+            if (armsOnly && b.kind < 2) continue;
             b.t.localRotation = b.initLocal;
             float ph = phase + (b.side > 0f ? 0f : Mathf.PI);
             float sw = Mathf.Sin(ph) * k;

@@ -163,37 +163,19 @@ public class MatchHUD : MonoBehaviour
     }
 
     // ============================================================ combate: vida, inventario, puntos
+    // iconos vectoriales detallados (IconFactory) con resplandor de rareza y sombra
     void DrawIcon(ItemType t, Rect r, float a)
     {
-        float w = r.width, h = r.height;
-        Color steel = new Color(0.78f, 0.8f, 0.85f, a), dark = new Color(0.25f, 0.27f, 0.3f, a), wood = new Color(0.65f, 0.4f, 0.2f, a);
-        switch (t)
-        {
-            case ItemType.Ball:
-                UIKit.Circle(new Rect(r.x + w * 0.18f, r.y + h * 0.18f, w * 0.64f, h * 0.64f), new Color(0.96f, 0.96f, 0.96f, a));
-                UIKit.Circle(new Rect(r.x + w * 0.38f, r.y + h * 0.38f, w * 0.24f, h * 0.24f), new Color(0.1f, 0.1f, 0.1f, a));
-                UIKit.Circle(new Rect(r.x + w * 0.24f, r.y + h * 0.28f, w * 0.12f, h * 0.12f), new Color(0.1f, 0.1f, 0.1f, a));
-                UIKit.Circle(new Rect(r.x + w * 0.62f, r.y + h * 0.30f, w * 0.12f, h * 0.12f), new Color(0.1f, 0.1f, 0.1f, a));
-                UIKit.Circle(new Rect(r.x + w * 0.44f, r.y + h * 0.66f, w * 0.12f, h * 0.12f), new Color(0.1f, 0.1f, 0.1f, a));
-                break;
-            case ItemType.Glock:
-                UIKit.Box(new Rect(r.x + w * 0.20f, r.y + h * 0.36f, w * 0.60f, h * 0.17f), steel);
-                UIKit.Box(new Rect(r.x + w * 0.22f, r.y + h * 0.53f, w * 0.16f, h * 0.27f), dark);
-                UIKit.Box(new Rect(r.x + w * 0.38f, r.y + h * 0.53f, w * 0.12f, h * 0.06f), dark);
-                break;
-            case ItemType.AK47:
-                UIKit.Box(new Rect(r.x + w * 0.08f, r.y + h * 0.40f, w * 0.84f, h * 0.10f), steel);
-                UIKit.Box(new Rect(r.x + w * 0.06f, r.y + h * 0.37f, w * 0.22f, h * 0.20f), wood);
-                UIKit.Box(new Rect(r.x + w * 0.52f, r.y + h * 0.37f, w * 0.20f, h * 0.10f), wood);
-                UIKit.Box(new Rect(r.x + w * 0.42f, r.y + h * 0.50f, w * 0.10f, h * 0.28f), dark);
-                UIKit.Box(new Rect(r.x + w * 0.30f, r.y + h * 0.50f, w * 0.07f, h * 0.18f), dark);
-                break;
-            default:
-                UIKit.Circle(new Rect(r.x + w * 0.27f, r.y + h * 0.30f, w * 0.46f, h * 0.50f), new Color(0.4f, 0.65f, 0.3f, a));
-                UIKit.Box(new Rect(r.x + w * 0.42f, r.y + h * 0.18f, w * 0.16f, h * 0.12f), steel);
-                UIKit.Box(new Rect(r.x + w * 0.5f, r.y + h * 0.14f, w * 0.18f, h * 0.05f), steel);
-                break;
-        }
+        float S = UIKit.S;
+        Texture2D tex = IconFactory.Get(t);
+        Color rc = Items.Rarity(t);
+        UIKit.Circle(new Rect(r.center.x - r.width * 0.46f, r.center.y - r.height * 0.46f, r.width * 0.92f, r.height * 0.92f), new Color(rc.r, rc.g, rc.b, 0.16f * a));
+        Color old = GUI.color;
+        GUI.color = new Color(0f, 0f, 0f, 0.5f * a);
+        GUI.DrawTexture(new Rect(r.x + 3f * S, r.y + 4f * S, r.width, r.height), tex, ScaleMode.ScaleToFit);
+        GUI.color = new Color(1f, 1f, 1f, a);
+        GUI.DrawTexture(r, tex, ScaleMode.ScaleToFit);
+        GUI.color = old;
     }
 
     void DrawCombatHud(MatchManager m, PlayerController pc)
@@ -330,7 +312,7 @@ public class MatchHUD : MonoBehaviour
                     UIKit.Box(new Rect(x - w * 0.5f, y - 20f * S * k, w * Mathf.Clamp01(c.health / c.maxHealth), 7f * S * k), new Color(0.9f, 0.2f, 0.15f));
                 }
                 if (sp.z < 18f)
-                    UIKit.Text(new Rect(x - 40f * S, y - 40f * S * k, 80f * S, 18f * S), "#" + p.index, Mathf.RoundToInt(13f * k), new Color(1f, 1f, 1f, 0.9f), TextAnchor.MiddleCenter, true, true);
+                    UIKit.Text(new Rect(x - 90f * S, y - 40f * S * k, 180f * S, 18f * S), p.shirtNumber.Length > 0 ? p.shirtNumber + " " + p.DisplayName : "#" + p.index, Mathf.RoundToInt(13f * k), new Color(1f, 1f, 1f, 0.9f), TextAnchor.MiddleCenter, true, true);
             }
     }
 
@@ -439,53 +421,102 @@ public class MatchHUD : MonoBehaviour
                        15, new Color(1f, 1f, 1f, 0.5f + 0.4f * Mathf.Sin(Time.time * 3f)), TextAnchor.MiddleRight, false);
     }
 
-    // ============================================================ final: podio, resultado y opciones
+    // ============================================================ final: el resultado del Clásico manda; las bajas son secundarias
     void DrawFinished(MatchManager m)
     {
         float S = UIKit.S, W = Screen.width, H = Screen.height;
         float t = Time.time - m.FinishTime;
+        int g0 = m.Score[0], g1 = m.Score[1];
+        int winner = g0 > g1 ? 0 : (g1 > g0 ? 1 : -1);
 
-        // título y resultado
+        // ---------- panel principal: goles de cada equipo, con el ganador resaltado
         float e1 = Ease(t / 0.8f);
-        float ty = 14f * S - (1f - e1) * 120f * S;
-        UIKit.Outline(new Rect(0f, ty, W, 80f * S), "FIN DEL PARTIDO", 66, Color.white, new Color(0.04f, 0.06f, 0.18f));
-        Rect sr = new Rect(W * 0.5f - 250f * S, ty + 84f * S, 500f * S, 78f * S);
-        UIKit.Round(sr, new Color(0.22f, 0.25f, 0.42f));
-        UIKit.DrawCrest(new Rect(sr.x + 18f * S, sr.y + 8f * S, 62f * S, 62f * S), 0, 1f);
-        UIKit.DrawCrest(new Rect(sr.xMax - 80f * S, sr.y + 8f * S, 62f * S, 62f * S), 1, 1f);
-        UIKit.Text(sr, m.Score[0] + "  -  " + m.Score[1], 48, UIKit.Gold);
-
-        string res; Color rc = Color.white;
-        if (m.Score[0] == m.Score[1]) res = "EMPATE EN EL CLÁSICO";
-        else
+        Rect pr = new Rect(W * 0.5f - 400f * S, 38f * S - (1f - e1) * 220f * S, 800f * S, 170f * S);
+        UIKit.Panel(pr, "RESULTADO FINAL");
+        float cx = pr.center.x;
+        for (int team = 0; team < 2; team++)
         {
-            int win = m.Score[0] > m.Score[1] ? 0 : 1;
-            if (m.UserTeam >= 0) { res = win == m.UserTeam ? "¡VICTORIA!" : "DERROTA"; rc = win == m.UserTeam ? UIKit.Gold : new Color(1f, 0.45f, 0.4f); }
-            else res = "GANA " + UIKit.TeamName(win);
+            bool win = winner == team, lose = winner >= 0 && !win;
+            float a = lose ? 0.55f : 1f;
+            Color tc = UIKit.TeamColor(team);
+            Rect half = new Rect(team == 0 ? pr.x + 18f * S : cx + 6f * S, pr.y + 22f * S, pr.width * 0.5f - 24f * S, pr.height - 44f * S);
+            if (win) UIKit.Gradient(half, new Color(tc.r * 1.4f, tc.g * 1.4f, tc.b * 1.4f, 0.45f), new Color(tc.r, tc.g, tc.b, 0.08f));
+            float crestX = team == 0 ? half.x + 22f * S : half.xMax - 22f * S - 104f * S;
+            UIKit.DrawCrest(new Rect(crestX, half.y + 14f * S, 104f * S, 104f * S), team, a);
+            UIKit.Text(new Rect(crestX - 30f * S, half.y + 116f * S, 164f * S, 26f * S), UIKit.TeamName(team), 17, new Color(1f, 1f, 1f, a));
+            Rect gr = team == 0 ? new Rect(cx - 190f * S, half.y + 6f * S, 150f * S, 130f * S) : new Rect(cx + 40f * S, half.y + 6f * S, 150f * S, 130f * S);
+            UIKit.Outline(gr, m.Score[team].ToString(), 104, new Color(win ? UIKit.Gold.r : 1f, win ? UIKit.Gold.g : 1f, win ? UIKit.Gold.b : 1f, a), new Color(0f, 0f, 0f, a * 0.85f));
+            if (win)
+            {
+                UIKit.Text(new Rect(half.x, half.y - 2f * S, half.width, 20f * S), "GANADOR", 14, UIKit.Gold);
+                UIKit.Diamond(new Vector2(crestX + 52f * S, half.y + 4f * S), 10f * S, UIKit.Gold);
+            }
         }
-        UIKit.Outline(new Rect(0f, sr.yMax + 4f * S, W, 50f * S), res, 34, rc, new Color(0f, 0f, 0f));
+        UIKit.Text(new Rect(cx - 40f * S, pr.y + 50f * S, 80f * S, 60f * S), "-", 64, UIKit.Gold);
 
-        // etiquetas sobre los tres mejores
-        Camera cam = Camera.main;
-        Podium p = Podium.I;
-        if (cam != null && p != null)
+        // ---------- veredicto + tu resultado + bajas: panel a la IZQUIERDA (el centro queda libre para el podio)
+        string verdict = winner < 0 ? "EMPATE" : "¡GANA " + UIKit.TeamName(winner) + "!";
+        Color vc = winner < 0 ? Color.white : Color.Lerp(UIKit.TeamColor(winner) * 1.8f, Color.white, 0.55f);
+        vc.a = 1f;
+        float e2 = Ease((t - 0.5f) / 0.6f);
+        Rect lp = new Rect(30f * S - (1f - e2) * 380f * S, H * 0.36f, 320f * S, 214f * S);
+        UIKit.Panel(lp, "EL CLÁSICO");
+        UIKit.Outline(new Rect(lp.x, lp.y + 44f * S, lp.width, 46f * S), verdict, verdict.Length > 15 ? 26 : 30,
+                      new Color(vc.r, vc.g, vc.b, e2), new Color(0f, 0f, 0f, e2));
+        if (m.UserTeam >= 0)
         {
-            Color[] pc = { new Color(1f, 0.8f, 0.25f), new Color(0.82f, 0.86f, 0.95f), new Color(0.85f, 0.55f, 0.3f) };
+            string mine = winner < 0 ? "EMPATE" : (winner == m.UserTeam ? "¡VICTORIA!" : "DERROTA");
+            Color mc = winner < 0 ? Color.white : (winner == m.UserTeam ? UIKit.Gold : new Color(1f, 0.5f, 0.45f));
+            UIKit.Text(new Rect(lp.x, lp.y + 92f * S, lp.width, 28f * S), mine, 20, new Color(mc.r, mc.g, mc.b, e2));
+        }
+
+        // ---------- bajas por equipo: estadística secundaria, discreta
+        Rect ks = new Rect(lp.x + 24f * S, lp.y + 140f * S, lp.width - 48f * S, 36f * S);
+        UIKit.Round(ks, new Color(0.2f, 0.22f, 0.38f, e2));
+        UIKit.Text(new Rect(ks.x + 14f * S, ks.y, 90f * S, ks.height), m.TeamKills[0].ToString(), 22, UIKit.TeamColor(0) * 1.8f, TextAnchor.MiddleLeft);
+        UIKit.Text(ks, "BAJAS", 14, new Color(1f, 1f, 1f, 0.8f));
+        UIKit.Text(new Rect(ks.xMax - 104f * S, ks.y, 90f * S, ks.height), m.TeamKills[1].ToString(), 22, UIKit.TeamColor(1) * 1.8f, TextAnchor.MiddleRight);
+
+        // ---------- tabla de los mejores en bajas (a la derecha, sin tapar el resultado)
+        Podium p = Podium.I;
+        Color[] medal = { new Color(1f, 0.8f, 0.25f), new Color(0.82f, 0.86f, 0.95f), new Color(0.85f, 0.55f, 0.3f) };
+        if (p != null && p.Entries.Count > 0)
+        {
+            float e3 = Ease((t - 1.0f) / 0.6f);
+            Rect tb = new Rect(W - 350f * S + (1f - e3) * 380f * S, H * 0.36f, 320f * S, 40f * S + p.Entries.Count * 60f * S + 14f * S);
+            UIKit.Panel(tb, "MEJORES BAJAS");
             for (int i = 0; i < p.Entries.Count; i++)
             {
                 Podium.Entry en = p.Entries[i];
-                Vector3 sp = cam.WorldToScreenPoint(en.ai.transform.position + Vector3.up * (en.ai.playerHeight + 0.55f));
-                if (sp.z < 0.5f) continue;
-                float a = Ease((t - 0.8f - i * 0.25f) / 0.5f);
-                Rect tag = new Rect(sp.x - 120f * S, Screen.height - sp.y - 70f * S * a, 240f * S, 70f * S);
-                UIKit.Round(tag, Color.Lerp(Color.white, pc[i], 0.85f));
-                UIKit.Text(new Rect(tag.x, tag.y + 4f * S, tag.width, 22f * S), (en.place == 1 ? "MVP · " : "") + en.place + "° PUESTO", 14, new Color(0.15f, 0.1f, 0.02f), TextAnchor.MiddleCenter, true, false);
-                UIKit.Text(new Rect(tag.x, tag.y + 22f * S, tag.width, 24f * S), en.label, 17, new Color(0.08f, 0.06f, 0.02f), TextAnchor.MiddleCenter, true, false);
-                UIKit.Text(new Rect(tag.x, tag.y + 44f * S, tag.width, 22f * S), en.kills + " bajas · " + en.deaths + " muertes", 14, new Color(0.15f, 0.1f, 0.02f), TextAnchor.MiddleCenter, false, false);
+                Rect row = new Rect(tb.x + 24f * S, tb.y + 40f * S + i * 60f * S, tb.width - 48f * S, 52f * S);
+                UIKit.Circle(new Rect(row.x, row.y + 6f * S, 40f * S, 40f * S), medal[i]);
+                UIKit.Text(new Rect(row.x, row.y + 6f * S, 40f * S, 40f * S), en.place.ToString(), 22, new Color(0.15f, 0.1f, 0.02f), TextAnchor.MiddleCenter, true, false);
+                UIKit.Text(new Rect(row.x + 52f * S, row.y + 2f * S, row.width - 52f * S, 26f * S), en.label, 16, Color.white, TextAnchor.MiddleLeft);
+                UIKit.Text(new Rect(row.x + 52f * S, row.y + 26f * S, row.width - 52f * S, 22f * S), en.kills + " bajas · " + en.deaths + " muertes", 13, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleLeft, false);
             }
         }
 
-        // opciones (aparecen unos segundos después)
+        // ---------- medallitas junto a cada héroe (al costado, a la altura del pecho: no tapan el marcador)
+        Camera cam = Camera.main;
+        if (cam != null && p != null)
+        {
+            for (int i = 0; i < p.Entries.Count; i++)
+            {
+                Podium.Entry en = p.Entries[i];
+                Vector3 sp = cam.WorldToScreenPoint(en.ai.transform.position + Vector3.up * (en.ai.playerHeight * 0.62f));
+                if (sp.z < 0.5f) continue;
+                float a = Ease((t - 0.8f - i * 0.25f) / 0.5f);
+                // al costado del héroe, pero nunca encima de los paneles laterales ni del marcador
+                float mx = Mathf.Clamp(sp.x + 60f * S, 370f * S, W - 410f * S);
+                float my = Mathf.Max(Screen.height - sp.y - 20f * S, pr.yMax + 14f * S);
+                Rect md = new Rect(mx, my, 40f * S, 40f * S);
+                UIKit.Circle(new Rect(md.x - 3f * S, md.y - 3f * S, md.width + 6f * S, md.height + 6f * S), new Color(0f, 0f, 0f, 0.6f * a));
+                UIKit.Circle(md, new Color(medal[i].r, medal[i].g, medal[i].b, a));
+                UIKit.Text(md, en.place.ToString(), 22, new Color(0.15f, 0.1f, 0.02f, a), TextAnchor.MiddleCenter, true, false);
+            }
+        }
+
+        // ---------- opciones (aparecen unos segundos después)
         float e = Ease((t - 2.2f) / 0.6f);
         float bw = 250f * S, bh = 58f * S, gap = 16f * S;
         float x0 = (W - (bw * 4f + gap * 3f)) * 0.5f, y = H - 116f * S + (1f - e) * 170f * S;
@@ -513,23 +544,5 @@ public class MatchHUD : MonoBehaviour
         if (UIKit.Button(new Rect(x, y + (bh + gap) * 4f, bw, bh), "SALIR", UIKit.Red)) GameSettings.Quit();
     }
 
-    // Se usa cuando se juega la escena del partido sin pasar por la escena MainMenu, y al "Cambiar de equipo".
-    void DrawFallbackMenu(MatchManager m)
-    {
-        float S = UIKit.S, H = Screen.height;
-        if (menuPage == 1) { if (MenuScreens.Settings()) menuPage = 0; return; }
-        if (menuPage == 2) { if (MenuScreens.Controls()) menuPage = 0; return; }
-        if (menuPage == 3) { if (MenuScreens.Credits(ref creditsScroll)) menuPage = 0; return; }
-
-        int r = MenuScreens.TeamSelect(false);
-        if (r == 0 || r == 1) m.StartMatch(r);
-        else if (r == 2) m.StartMatch(-1);
-
-        float bw = 150f * S, bh = 44f * S, y = H - 66f * S;
-        if (UIKit.Button(new Rect(24f * S, y, bw, bh), "AJUSTES", UIKit.Blue, 17)) menuPage = 1;
-        if (UIKit.Button(new Rect(24f * S + bw + 12f * S, y, bw, bh), "CONTROLES", UIKit.Slate, 17)) menuPage = 2;
-        if (UIKit.Button(new Rect(24f * S + (bw + 12f * S) * 2f, y, bw, bh), "CRÉDITOS", UIKit.Purple, 17)) { menuPage = 3; creditsScroll = 0f; }
-        if (UIKit.Button(new Rect(24f * S + (bw + 12f * S) * 3f, y, bw, bh), "SALIR", UIKit.Red, 17)) GameSettings.Quit();
-        if (GameSession.MenuAvailable && UIKit.Button(new Rect(Screen.width - 24f * S - 220f * S, y, 220f * S, bh), "MENÚ PRINCIPAL", UIKit.Gold, 17)) m.GoToMainMenu();
-    }
+    void DrawFallbackMenu(MatchManager m) { MainMenuUI.Draw(m); }
 }

@@ -24,6 +24,9 @@ public class PlayerAI : MonoBehaviour
     public int index;
     public Role role;
     public bool isGoalkeeper;
+    [HideInInspector] public string shirtName = "";     // nombre y número de la camiseta (los pone MatchSetup)
+    [HideInInspector] public string shirtNumber = "";
+    public string DisplayName { get { return string.IsNullOrEmpty(shirtName) ? (teamId == 0 ? "MIL " : "NAC ") + index : shirtName; } }
     public float attackDirection = 1f;
     public float speed = 6.5f;
     [Tooltip("Multiplica la velocidad de todos los jugadores (1 = rápido, 0.7 = más realista)")]
@@ -49,6 +52,9 @@ public class PlayerAI : MonoBehaviour
     public Vector3 Velocity { get; private set; }
     [HideInInspector] public Vector3 aiFace;          // la IA de combate gira el cuerpo hacia su objetivo
     PlayerCombat combat;
+    MixamoAnimator mixamo;
+    public MixamoAnimator Mixamo { get { if (mixamo == null) mixamo = GetComponent<MixamoAnimator>(); return mixamo; } }
+    [HideInInspector] public int nextKickAnim = -1;      // AnimKey que debe usar la próxima patada (saque de banda)
     public PlayerCombat Combat { get { if (combat == null) combat = GetComponent<PlayerCombat>(); return combat; } }
     public bool IsDead { get { PlayerCombat c = Combat; return c != null && c.IsDead; } }
     public void OnDied() { Velocity = Vector3.zero; }
@@ -102,10 +108,183 @@ public class PlayerAI : MonoBehaviour
         transform.position = pos;
         cc.enabled = true;
         Velocity = Vector3.zero;
+        jumpY = 0f; jumpVel = 0f; diveUntil = slideUntil = busyUntil = 0f; pendingStandUp = false;
         if (face.sqrMagnitude > 0.01f) { FaceDir = face.normalized; ApplyRotation(1f); }
     }
 
-    public void OnGotBall() { holdTime = Random.Range(0.6f, 1.8f); }
+    public void OnGotBall(float incomingSpeed = 0f)
+    {
+        holdTime = Random.Range(0.6f, 1.8f);
+        if (Mixamo == null) return;
+        if (isGoalkeeper) { if (!IsDiving) Mixamo.OnCatch(); }    // el portero atrapa el balón (en plena estirada sigue la estirada)
+        else if (incomingSpeed > 8f && !Busy && jumpY <= 0f) Mixamo.Play(AnimKey.Receive);   // control de un pase fuerte
+    }
+
+    // ================================================================== MOVIMIENTOS ESPECIALES
+    //  Espacio: salto + cabezazo · E: barrida · portero: estirada automática · el que pierde la barrida tropieza
+    float jumpY, jumpVel, nextJump, nextDive, nextSlide;
+    bool headed, pendingStandUp, slideResolved;
+    Vector3 headerAim, diveDir, slideDir;
+    float diveStart, diveUntil, diveDist, slideStart, slideUntil, busyUntil;
+
+    public bool IsDiving { get { return Time.time < diveUntil; } }
+    public bool Airborne { get { return jumpY > 0f || jumpVel > 0f; } }
+    public bool Busy { get { return Time.time < busyUntil || Time.time < diveUntil || Time.time < slideUntil || pendingStandUp; } }
+
+    public bool TryJump(Vector3 aim)
+    {
+        if (m == null || IsDead || Airborne || Busy || Time.time < nextJump || !CanTouchBall) return false;
+        jumpVel = 4.4f;                       // ~1 m de salto
+        nextJump = Time.time + 1.0f;
+        headed = false;
+        headerAim = aim.sqrMagnitude > 0.01f ? aim.normalized : FaceDir;
+        if (Mixamo != null) Mixamo.Play(AnimKey.Header);
+        return true;
+    }
+
+    public bool TrySlideTackle()
+    {
+        if (m == null || IsDead || isGoalkeeper || Airborne || Busy || Time.time < nextSlide || !CanTouchBall) return false;
+        if (m.State != MatchState.Playing || m.Holder == this) return false;
+        slideDir = FaceDir; slideDir.y = 0f; slideDir.Normalize();
+        slideStart = Time.time;
+        float d = Mixamo != null ? Mixamo.Play(AnimKey.Tackle) : 0f;
+        slideUntil = Time.time + (d > 0f ? Mathf.Min(d, 1.4f) : 0.8f);
+        nextSlide = Time.time + 1.8f;
+        slideResolved = false;
+        return true;
+    }
+
+    // perdió el balón por una barrida
+    public void Trip()
+    {
+        Velocity = Vector3.zero;
+        jumpY = 0f; jumpVel = 0f;
+        float d = Mixamo != null ? Mixamo.Play(AnimKey.Trip) : 0f;
+        busyUntil = Time.time + (d > 0f ? Mathf.Min(d, 2.2f) : 0.8f);
+    }
+
+    void StartDive(Vector3 dir, float lateral)
+    {
+        diveDir = dir;
+        diveDist = Mathf.Clamp(lateral, 0.8f, 2.8f);
+        diveStart = Time.time;
+        float d = Mixamo != null ? Mixamo.OnDive(dir) : 0f;
+        diveUntil = Time.time + (d > 0f ? Mathf.Clamp(d, 0.7f, 1.6f) : 0.9f);
+        pendingStandUp = true;
+        nextDive = Time.time + 2.5f;
+        Velocity = Vector3.zero;
+    }
+
+    void UpdateJump(float dt)
+    {
+        if (!Airborne) return;
+        jumpVel -= 9.81f * dt;
+        jumpY += jumpVel * dt;
+        if (jumpY <= 0f) { jumpY = 0f; jumpVel = 0f; }
+    }
+
+    // cabezazo: en el aire, si el balón pasa cerca de la cabeza sale disparado hacia donde se apunta
+    void TryHeader()
+    {
+        if (headed || jumpY < 0.05f || m.State != MatchState.Playing || !CanTouchBall) return;
+        if (m.Holder != null) return;
+        float feetY = transform.position.y - pivotToSole - footOffset;
+        Vector3 head = transform.position + FaceDir * 0.15f;
+        head.y = feetY + playerHeight * 0.92f;
+        if ((m.Ball.position - head).magnitude > 0.62f) return;
+        headed = true;
+        Vector3 dir = Flat(headerAim);
+        if (dir.sqrMagnitude < 0.01f) dir = FaceDir;
+        dir.Normalize();
+        float vy = Mathf.Clamp(headerAim.y * 10f, -3.5f, 5f) + 1.2f;
+        m.BallRb.velocity = dir * 12.5f + Vector3.up * vy;
+        m.NotifyKick(this);
+        if (GameAudio.I != null) GameAudio.I.Kick(10f, m.Ball.position);
+    }
+
+    // mover sin la lógica normal (estirada, barrida) manteniendo los pies en el césped
+    void MoveRaw(Vector3 horizontal, float dt)
+    {
+        Vector3 pos = transform.position;
+        float targetY = GroundY(pos) + pivotToSole + footOffset;
+        float dy = Mathf.Clamp(targetY - pos.y, -0.3f, 0.3f);
+        cc.Move(new Vector3(horizontal.x * dt, dy, horizontal.z * dt));
+    }
+
+    void UpdateSpecial(float dt)
+    {
+        Velocity = Vector3.zero;
+        float now = Time.time;
+        if (now < diveUntil)
+        {
+            float t = now - diveStart;
+            if (t < 0.45f) MoveRaw(diveDir * (diveDist / 0.45f), dt);
+            else MoveRaw(Vector3.zero, dt);
+            return;
+        }
+        if (pendingStandUp)
+        {
+            pendingStandUp = false;
+            float d = Mixamo != null ? Mixamo.Play(AnimKey.StandUp) : 0f;
+            busyUntil = now + (d > 0f ? Mathf.Min(d, 1.6f) : 0.4f);
+            return;
+        }
+        if (now < slideUntil)
+        {
+            float t = now - slideStart;
+            MoveRaw(slideDir * Mathf.Lerp(7.5f, 0f, Mathf.Clamp01(t / 0.65f)), dt);
+            if (!slideResolved && t < 0.7f && m.State == MatchState.Playing)
+            {
+                Vector3 foot = transform.position + slideDir * 0.6f;
+                PlayerAI h = m.Holder;
+                if (h != null && h != this && h.teamId != teamId && Flat(h.transform.position - foot).magnitude < 1.3f)
+                {
+                    slideResolved = true;
+                    m.SlideTackle(this);
+                }
+                else if (h == null && Flat(m.Ball.position - foot).magnitude < 1.0f && m.Ball.position.y < 0.6f)
+                {
+                    slideResolved = true;            // toca el balón libre y lo despeja hacia delante
+                    m.BallRb.velocity = slideDir * 7f + Vector3.up * 0.6f;
+                    m.NotifyKick(this);
+                    if (GameAudio.I != null) GameAudio.I.Kick(7f, m.Ball.position);
+                }
+            }
+            return;
+        }
+        MoveRaw(Vector3.zero, dt);              // tropiezo / levantándose
+    }
+
+    // la IA decide saltar a cabecear o estirarse (portero)
+    void AutoSpecials()
+    {
+        if (m.State != MatchState.Playing || m.Holder != null || Busy || Airborne || !CanTouchBall) return;
+        Vector3 b = m.Ball.position;
+        Vector3 bv = m.BallRb.velocity;
+        Vector3 pos = transform.position;
+
+        if (isGoalkeeper)
+        {
+            if (Time.time < nextDive || Mathf.Abs(bv.x) < 1f || bv.x * -attackDirection < 7f) return;
+            float t = (pos.x - b.x) / bv.x;
+            if (t < 0.05f || t > 0.6f) return;
+            float zAt = b.z + bv.z * t;
+            float yAt = b.y + bv.y * t - 4.905f * t * t;
+            float lateral = zAt - pos.z;
+            if (Mathf.Abs(lateral) > 0.9f && Mathf.Abs(lateral) < 4f && yAt < m.goalHeight + 0.5f && Mathf.Abs(zAt) < m.goalHalfWidth + 1f)
+                StartDive(new Vector3(0f, 0f, Mathf.Sign(lateral)), Mathf.Abs(lateral));
+            return;
+        }
+        if (userControlled) return;
+        if (b.y > 1.4f && b.y < 2.6f && bv.y < 2f && Flat(b - pos).magnitude < 1.5f && Random.value < 0.5f)
+        {
+            Vector3 goal = new Vector3(attackDirection * m.HL, 0f, 0f);
+            Vector3 aim = Flat(goal - pos).normalized;
+            aim.y = -0.1f;
+            TryJump(aim);
+        }
+    }
 
     void ApplyRotation(float t)
     {
@@ -120,14 +299,21 @@ public class PlayerAI : MonoBehaviour
         if (m == null || m.Ball == null) return;
         float dt = Time.deltaTime;
 
-        if (IsDead) { Velocity = Vector3.zero; UpdateAnimator(); return; }
+        if (IsDead) { Velocity = Vector3.zero; jumpY = 0f; jumpVel = 0f; UpdateAnimator(); return; }
 
+        UpdateJump(dt);
         if (m.State == MatchState.Goal || m.State == MatchState.Finished || m.State == MatchState.Menu || m.State == MatchState.Intro)
         {
+            diveUntil = slideUntil = busyUntil = 0f; pendingStandUp = false;
             MoveTo(transform.position, 0f, dt);
             UpdateAnimator();
             return;
         }
+
+        if (Busy) { UpdateSpecial(dt); UpdateAnimator(); return; }
+        AutoSpecials();
+        if (Busy) { UpdateSpecial(dt); UpdateAnimator(); return; }
+        TryHeader();
 
         bool userActive = userControlled && (m.State == MatchState.Playing ||
             (m.State == MatchState.SetPiece && m.Taker == this && m.UserTakesSetPiece));
@@ -150,7 +336,10 @@ public class PlayerAI : MonoBehaviour
         if (m.State == MatchState.Playing && m.Holder != null && m.Holder.teamId != teamId
             && !isGoalkeeper && Time.time >= nextTackle)
         {
-            if (Flat(m.Holder.transform.position - transform.position).magnitude < 1.1f)
+            float hd = Flat(m.Holder.transform.position - transform.position).magnitude;
+            if (!userActive && hd < 2.6f && hd > 1.4f && Random.value < 0.012f && TrySlideTackle())
+                nextTackle = Time.time + 1.5f;                     // a veces la IA se tira en barrida
+            else if (hd < 1.1f)
             {
                 nextTackle = Time.time + 0.8f;
                 m.TryTackle(this);
@@ -197,14 +386,15 @@ public class PlayerAI : MonoBehaviour
     // así las suelas quedan exactamente sobre el piso, sin depender del skinWidth del CharacterController.
     void ApplyVelocity(Vector3 desired, float dt, Vector3 faceOverride)
     {
+        if (Mixamo != null) desired *= Mixamo.MoveFactor;       // frena un poco mientras patea
         Velocity = Vector3.MoveTowards(Velocity, desired, 14f * dt);
         Vector3 pos = transform.position;
-        float targetY = GroundY(pos) + pivotToSole + footOffset;
+        float targetY = GroundY(pos) + pivotToSole + footOffset + jumpY;
         float dy = Mathf.Clamp(targetY - pos.y, -0.3f, 0.3f);
         cc.Move(new Vector3(Velocity.x * dt, dy, Velocity.z * dt));
 
         float spd = Velocity.magnitude;                       // pasos
-        if (spd > 1.2f && GameAudio.I != null)
+        if (spd > 1.2f && !Airborne && GameAudio.I != null)
         {
             stepDist += spd * dt;
             if (stepDist >= (spd > 5f ? 2.3f : 1.7f))
@@ -635,7 +825,7 @@ public class PlayerAI : MonoBehaviour
         if (mate == null) mate = NearestMate(pos);
         if (mate == null) return;
         Vector3 mp = ClampToPitch(Flat(mate.transform.position) + mate.Velocity * 0.4f);
-        if (type == SetPieceType.ThrowIn) KickLofted(mp, 11f, 1.2f);
+        if (type == SetPieceType.ThrowIn) { nextKickAnim = (int)AnimKey.ThrowIn; KickLofted(mp, 11f, 1.2f); }
         else KickGround(mp, 9f);
         m.SetPassTarget(mate);
     }
@@ -661,7 +851,28 @@ public class PlayerAI : MonoBehaviour
         Kick(vel);
     }
 
+    bool kickPending;
+
+    // La animación decide cuándo sale el balón (ActionTiming.releaseDelay): se ve el golpe y el balón sale con él.
     void Kick(Vector3 vel)
+    {
+        if (kickPending) return;
+        int ka = nextKickAnim; nextKickAnim = -1;
+        float delay = Mixamo != null ? Mixamo.OnKick(vel, ka) : 0f;
+        if (delay > 0.01f) { StartCoroutine(KickLater(vel, delay)); return; }
+        DoKick(vel);
+    }
+
+    IEnumerator KickLater(Vector3 vel, float delay)
+    {
+        kickPending = true;
+        float t = 0f;
+        while (t < delay) { t += Time.deltaTime; yield return null; }
+        kickPending = false;
+        if (m != null && !IsDead && Flat(m.Ball.position - transform.position).magnitude < 2.8f) DoKick(vel);
+    }
+
+    void DoKick(Vector3 vel)
     {
         Rigidbody rb = m.BallRb;
         rb.isKinematic = false;

@@ -1,0 +1,197 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9f293ce63ce05fc46afb048b765db576, type: 3}
+  m_Name: AnimationSet
+  m_EditorClassIdentifier: 
+  characterAvatar: {fileID: 9000000, guid: d8c293318586d464daeb94e5562d55e5, type: 3}
+  importVersion: 3
+  idle: {fileID: 2110670268237213777, guid: 566abee38ca5d904993a035ed0205620, type: 3}
+  goalkeeperIdle: {fileID: -5950498853245588108, guid: 1110db7057747604cabd2034de57924e,
+    type: 3}
+  jogForward: {fileID: -215699890414486320, guid: c76860f55d6423149b03df374e26d795,
+    type: 3}
+  jogBackward: {fileID: 3073285446687011618, guid: 7acc0ca77ad10df408c8a4ab659c4559,
+    type: 3}
+  strafeLeft: {fileID: -4994581990263852958, guid: 256d9769f35133640b8f88bcd614c62b,
+    type: 3}
+  strafeRight: {fileID: -5534002597283444736, guid: 2b9fc6d5f3d68184b86e747b24d884f7,
+    type: 3}
+  sprint: {fileID: 0}
+  jogRefSpeed: 3.8
+  sprintRefSpeed: 6
+  maxPlaybackSpeed: 1.45
+  blendTime: 0.15
+  stopBlendTime: 0.3
+  idleDelay: 6.5
+  kick:
+    clip: {fileID: -8431490576529646128, guid: 25802913f12af3e4f80e0066681a950a, type: 3}
+    startOffset: 0.2
+    speed: 1.25
+    releaseDelay: 0.12
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 0
+    moveFactor: 0.5
+  kick2:
+    clip: {fileID: -7450155454195302434, guid: e73aa057da4bea7449cfb0abbffa488b, type: 3}
+    startOffset: 0.2
+    speed: 1.25
+    releaseDelay: 0.12
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 0
+    moveFactor: 0.5
+  penaltyKick:
+    clip: {fileID: 4111340339446443068, guid: 64f2f1e65013b624096ca182060278ab, type: 3}
+    startOffset: 0.3
+    speed: 1.1
+    releaseDelay: 0.2
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 0
+    moveFactor: 0.2
+  throwIn:
+    clip: {fileID: 9056334988362293073, guid: 3d7f78b572a71b146ba7b55aefaf3926, type: 3}
+    startOffset: 0.25
+    speed: 1.1
+    releaseDelay: 0.25
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 0
+    moveFactor: 0.2
+  header:
+    clip: {fileID: 6890683746964066298, guid: f2f129f31fcb4f346b5362c951bfa793, type: 3}
+    startOffset: 0.15
+    speed: 1.2
+    releaseDelay: 0.1
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 0
+    moveFactor: 0.6
+  tackle:
+    clip: {fileID: -6681865492566370078, guid: 61a776a829659b6429e80c6b660d09a1, type: 3}
+    startOffset: 0.1
+    speed: 1.2
+    releaseDelay: 0
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 0
+    moveFactor: 0
+  trip:
+    clip: {fileID: -2137237250032241064, guid: 38112f199dcd99d4fa4885473b74e220, type: 3}
+    startOffset: 0
+    speed: 1.15
+    releaseDelay: 0
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 0
+    moveFactor: 0
+  receive:
+    clip: {fileID: -3081144526714734255, guid: f94c27760de1caf4c811154870208221, type: 3}
+    startOffset: 0.1
+    speed: 1.3
+    releaseDelay: 0
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 0
+    moveFactor: 0.6
+  standUp:
+    clip: {fileID: 7765440341522766073, guid: 360f0a40307163b4f93ac732030dc8c8, type: 3}
+    startOffset: 0.2
+    speed: 1.4
+    releaseDelay: 0
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 0
+    moveFactor: 0
+  gkCatch:
+    clip: {fileID: 3721523852513143909, guid: 2d6378a1fedf66843a4482a583cf6768, type: 3}
+    startOffset: 0
+    speed: 1.2
+    releaseDelay: 0
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 1
+    moveFactor: 0
+  gkDropKick:
+    clip: {fileID: -1484772485447882835, guid: 1d5714206d49dd2448935ad3d90b1904, type: 3}
+    startOffset: 0.35
+    speed: 1.2
+    releaseDelay: 0.45
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 0
+    moveFactor: 0.2
+  gkPass:
+    clip: {fileID: -6778820780669526894, guid: fcfc093046e32f34daaf226ac69bae29, type: 3}
+    startOffset: 0.3
+    speed: 1.2
+    releaseDelay: 0.3
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 0
+    moveFactor: 0.3
+  gkThrow:
+    clip: {fileID: -3682225655470455468, guid: 2b7c5a2cd67a3324aa2a42cc7677d8f4, type: 3}
+    startOffset: 0.3
+    speed: 1.2
+    releaseDelay: 0.35
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 0
+    moveFactor: 0.2
+  gkPlace:
+    clip: {fileID: -2386487426612624483, guid: 1b3178401e76799438d3dee0cbb43c5e, type: 3}
+    startOffset: 0
+    speed: 1
+    releaseDelay: 0
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 0
+    moveFactor: 0
+  gkDive:
+    clip: {fileID: -6283317667852354099, guid: dcca02f5635c5d84c9cfe4d59cc72a48, type: 3}
+    startOffset: 0
+    speed: 1.1
+    releaseDelay: 0
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 0
+    moveFactor: 0
+  gkDiveMirror: {fileID: -8960709421518332139, guid: dcca02f5635c5d84c9cfe4d59cc72a48,
+    type: 3}
+  gkDiveSide: -1
+  fallen:
+    clip: {fileID: 8002965734027844731, guid: e8b0d3f06597d0e47bc282a655f724e2, type: 3}
+    startOffset: 0
+    speed: 1
+    releaseDelay: 0
+    fadeIn: 0.08
+    fadeOut: 0.15
+    endTrim: 0.05
+    holdAtEnd: 1
+    moveFactor: 0

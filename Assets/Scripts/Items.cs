@@ -66,34 +66,15 @@ public class WeaponTuning : MonoBehaviour
     public float akLength = 0.85f, glockLength = 0.2f, grenadeSize = 0.09f;
     [Tooltip("Actívalo si el arma aparece en la mano izquierda")]
     public bool leftHand = false;
+    [Header("Agarre (IK): giro de cada mano sobre su eje, en grados. Ajústalo en Play si el dorso queda al revés")]
+    [Range(-180f, 180f)] public float rightHandRoll = 0f;
+    [Range(-180f, 180f)] public float leftHandRoll = 0f;
     void Awake() { I = this; }
 }
 
-// Modelos de arma: usa tu prefab de Resources/Weapons si existe; si no, arma sencilla hecha con formas básicas.
+// Modelos de arma: usa tu prefab de Resources/Weapons si existe; si no, el modelo low-poly de WeaponMeshes.
 public static class WeaponModels
 {
-    static Material Mat(Color c)
-    {
-        Shader sh = Shader.Find("Standard");
-        if (sh == null) sh = Shader.Find("Sprites/Default");
-        Material m = new Material(sh);
-        m.color = c;
-        if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.35f);
-        return m;
-    }
-
-    static Transform Part(Transform parent, PrimitiveType type, Vector3 pos, Vector3 scale, Color c, Vector3 euler)
-    {
-        GameObject go = GameObject.CreatePrimitive(type);
-        Object.Destroy(go.GetComponent<Collider>());
-        go.transform.SetParent(parent, false);
-        go.transform.localPosition = pos;
-        go.transform.localScale = scale;
-        go.transform.localRotation = Quaternion.Euler(euler);
-        go.GetComponent<Renderer>().sharedMaterial = Mat(c);
-        return go.transform;
-    }
-
     public static string ResName(ItemType t)
     {
         return t == ItemType.AK47 ? "ak47" : (t == ItemType.Glock ? "glock" : "grenade");
@@ -137,31 +118,16 @@ public static class WeaponModels
             return root;
         }
 
+        // modelos low-poly detallados hechos por código (ver WeaponMeshes.cs)
         Transform p = root.transform;
-        Color dark = new Color(0.10f, 0.10f, 0.11f), metal = new Color(0.22f, 0.22f, 0.24f), wood = new Color(0.40f, 0.22f, 0.10f);
+        WeaponMeshes.Create(t, p);
         if (t == ItemType.AK47)
         {
-            Part(p, PrimitiveType.Cube, new Vector3(0f, 0.01f, 0f), new Vector3(0.05f, 0.07f, 0.34f), metal, Vector3.zero);       // caja
-            Part(p, PrimitiveType.Cylinder, new Vector3(0f, 0.025f, 0.40f), new Vector3(0.024f, 0.19f, 0.024f), dark, new Vector3(90f, 0f, 0f)); // cañón
-            Part(p, PrimitiveType.Cube, new Vector3(0f, 0f, 0.27f), new Vector3(0.055f, 0.05f, 0.22f), wood, Vector3.zero);       // guardamanos
-            Part(p, PrimitiveType.Cube, new Vector3(0f, -0.015f, -0.27f), new Vector3(0.04f, 0.09f, 0.22f), wood, new Vector3(-8f, 0f, 0f)); // culata
-            Part(p, PrimitiveType.Cube, new Vector3(0f, -0.07f, -0.1f), new Vector3(0.035f, 0.1f, 0.04f), dark, new Vector3(-18f, 0f, 0f));  // empuñadura
-            Part(p, PrimitiveType.Cube, new Vector3(0f, -0.1f, 0.06f), new Vector3(0.035f, 0.15f, 0.07f), dark, new Vector3(18f, 0f, 0f));   // cargador
-            Part(p, PrimitiveType.Cube, new Vector3(0f, 0.065f, 0.48f), new Vector3(0.012f, 0.03f, 0.012f), dark, Vector3.zero);   // mira
-            GameObject mz = new GameObject("Muzzle"); mz.transform.SetParent(p, false); mz.transform.localPosition = new Vector3(0f, 0.025f, 0.5f); muzzle = mz.transform;
+            GameObject mz = new GameObject("Muzzle"); mz.transform.SetParent(p, false); mz.transform.localPosition = new Vector3(0f, 0.012f, 0.595f); muzzle = mz.transform;
         }
         else if (t == ItemType.Glock)
         {
-            Part(p, PrimitiveType.Cube, new Vector3(0f, 0.03f, 0.01f), new Vector3(0.03f, 0.036f, 0.19f), dark, Vector3.zero);    // corredera
-            Part(p, PrimitiveType.Cube, new Vector3(0f, 0.0f, 0f), new Vector3(0.03f, 0.03f, 0.16f), metal, Vector3.zero);        // armazón
-            Part(p, PrimitiveType.Cube, new Vector3(0f, -0.05f, -0.045f), new Vector3(0.03f, 0.09f, 0.045f), dark, new Vector3(-14f, 0f, 0f)); // empuñadura
-            GameObject mz = new GameObject("Muzzle"); mz.transform.SetParent(p, false); mz.transform.localPosition = new Vector3(0f, 0.03f, 0.105f); muzzle = mz.transform;
-        }
-        else
-        {
-            Part(p, PrimitiveType.Sphere, Vector3.zero, new Vector3(0.085f, 0.1f, 0.085f), new Color(0.22f, 0.32f, 0.16f), Vector3.zero);
-            Part(p, PrimitiveType.Cylinder, new Vector3(0f, 0.06f, 0f), new Vector3(0.03f, 0.012f, 0.03f), metal, Vector3.zero);
-            Part(p, PrimitiveType.Cube, new Vector3(0.02f, 0.07f, 0f), new Vector3(0.05f, 0.008f, 0.014f), metal, Vector3.zero);
+            GameObject mz = new GameObject("Muzzle"); mz.transform.SetParent(p, false); mz.transform.localPosition = new Vector3(0f, 0.032f, 0.1f); muzzle = mz.transform;
         }
         return root;
     }

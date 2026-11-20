@@ -13,21 +13,24 @@ public static class MenuScreens
         "Fútbol, balas, granadas y mucha salsa",
         "",
         "#DISEÑO Y PROGRAMACIÓN",
-        "[ESCRIBE AQUÍ TU NOMBRE]",
+        "Juan Pablo Chaves A.K.A Avanuit",
         "",
         "#MODELOS 3D",
         "Jugador, estadio y balón: Sketchfab",
-        "(créditos de cada autor en la página del modelo)",
+        "Football Player Model — tomleeosborn (Sketchfab)",
+        "Adidas Soccer Ball — Welham14 (Sketchfab)",
+        "Soccer Modern Stadium Model — Razny (Sketchfab)",
         "",
-        "#MOTOR",
+        "#MOTOR Y ASSETS",
         "Unity 2019.4",
+        "Super Casual Shooter — olusola olaoye (Unity Asset Store)",
         "",
         "#MÚSICA Y SONIDO",
-        "[ESCRIBE AQUÍ TUS FUENTES DE AUDIO]",
+        "Football Track, Football Ambience — The Mountain (Pixabay)",
         "",
         "#ESCUDOS",
         "Millonarios F.C. y Atlético Nacional",
-        "son marcas de sus respectivos clubes",
+        "Marcas de sus respectivos clubes",
         "",
         "#AGRADECIMIENTOS",
         "A las hinchadas de Bogotá y Medellín",
@@ -40,6 +43,8 @@ public static class MenuScreens
     {
         { "W A S D",   "Mover al jugador" },
         { "Shift",     "Correr" },
+        { "Espacio",   "Saltar y cabecear el balón" },
+        { "E",         "Barrida (quita el balón al rival)" },
         { "Mouse",     "Mover la cámara y apuntar" },
         { "Z  /  X",   "Alejar / acercar la cámara" },
         { "1 2 3 4",   "Balón · Glock · AK-47 · Granadas (o rueda del mouse)" },
@@ -65,30 +70,27 @@ public static class MenuScreens
 
     static string Pct(float v) { return Mathf.RoundToInt(v * 100f) + "%"; }
 
-    // ------------------------------------------------------------ ajustes: audio, brillo y duración
+    // ------------------------------------------------------------ ajustes: audio y brillo (+ acceso a los controles)
+    static bool settingsControls;
+
     public static bool Settings()
     {
+        if (settingsControls) { if (Controls()) settingsControls = false; return false; }
         float S = UIKit.S;
         Dim();
-        Rect p = Centered(680, 640);
+        Rect p = Centered(680, 620);
         UIKit.Panel(p, "AJUSTES");
-        float x = p.x + 56f * S, w = p.width - 112f * S, y = p.y + 56f * S;
+        float x = p.x + 56f * S, w = p.width - 112f * S, y = p.y + 58f * S;
 
-        GameSettings.Master = UIKit.Slider(new Rect(x, y, w, 52f * S), "Volumen general", GameSettings.Master, 0f, 1f, Pct(GameSettings.Master), UIKit.Blue); y += 70f * S;
-        GameSettings.Music = UIKit.Slider(new Rect(x, y, w, 52f * S), "Música", GameSettings.Music, 0f, 1f, Pct(GameSettings.Music), UIKit.Purple); y += 70f * S;
-        GameSettings.Sfx = UIKit.Slider(new Rect(x, y, w, 52f * S), "Efectos (disparos, pasos, explosiones)", GameSettings.Sfx, 0f, 1f, Pct(GameSettings.Sfx), UIKit.Green); y += 70f * S;
-        GameSettings.Ambient = UIKit.Slider(new Rect(x, y, w, 52f * S), "Ambiente (grada y viento)", GameSettings.Ambient, 0f, 1f, Pct(GameSettings.Ambient), UIKit.Slate); y += 70f * S;
-        GameSettings.Brightness = UIKit.Slider(new Rect(x, y, w, 52f * S), "Brillo", GameSettings.Brightness, 0.5f, 1.5f, Pct(GameSettings.Brightness), UIKit.Gold); y += 74f * S;
+        GameSettings.Master = UIKit.Slider(new Rect(x, y, w, 52f * S), "Volumen general", GameSettings.Master, 0f, 1f, Pct(GameSettings.Master), UIKit.Blue); y += 72f * S;
+        GameSettings.Music = UIKit.Slider(new Rect(x, y, w, 52f * S), "Música", GameSettings.Music, 0f, 1f, Pct(GameSettings.Music), UIKit.Purple); y += 72f * S;
+        GameSettings.Sfx = UIKit.Slider(new Rect(x, y, w, 52f * S), "Efectos (disparos, pasos, explosiones)", GameSettings.Sfx, 0f, 1f, Pct(GameSettings.Sfx), UIKit.Green); y += 72f * S;
+        GameSettings.Ambient = UIKit.Slider(new Rect(x, y, w, 52f * S), "Ambiente (grada y viento)", GameSettings.Ambient, 0f, 1f, Pct(GameSettings.Ambient), UIKit.Slate); y += 72f * S;
+        GameSettings.Brightness = UIKit.Slider(new Rect(x, y, w, 52f * S), "Brillo", GameSettings.Brightness, 0.5f, 1.5f, Pct(GameSettings.Brightness), UIKit.Gold); y += 76f * S;
 
-        UIKit.Text(new Rect(x, y + 4f * S, w * 0.5f, 36f * S), "Duración del partido", 18, Color.white, TextAnchor.MiddleLeft);
-        int idx = 1;
-        for (int i = 0; i < minuteOptions.Length; i++) if (minuteOptions[i] == GameSettings.MatchMinutes) idx = i;
-        if (UIKit.Button(new Rect(x + w - 250f * S, y, 46f * S, 44f * S), "<", UIKit.Slate, 22)) idx = (idx + minuteOptions.Length - 1) % minuteOptions.Length;
-        UIKit.Text(new Rect(x + w - 198f * S, y, 142f * S, 44f * S), minuteOptions[idx] + " min", 22, UIKit.Gold);
-        if (UIKit.Button(new Rect(x + w - 50f * S, y, 46f * S, 44f * S), ">", UIKit.Slate, 22)) idx = (idx + 1) % minuteOptions.Length;
-        GameSettings.MatchMinutes = minuteOptions[idx];
+        if (UIKit.Button(new Rect(p.center.x - 150f * S, y, 300f * S, 48f * S), "VER CONTROLES", UIKit.Slate, 20)) settingsControls = true;
 
-        if (UIKit.Button(new Rect(p.center.x - 115f * S, p.yMax - 84f * S, 230f * S, 54f * S), "VOLVER", UIKit.Blue))
+        if (UIKit.Button(new Rect(p.center.x - 115f * S, p.yMax - 78f * S, 230f * S, 52f * S), "VOLVER", UIKit.Blue))
         {
             GameSettings.Save();
             return true;
@@ -101,12 +103,12 @@ public static class MenuScreens
     {
         float S = UIKit.S;
         Dim();
-        Rect p = Centered(900, 640);
+        Rect p = Centered(900, 680);
         UIKit.Panel(p, "CONTROLES");
         int rows = controlRows.GetLength(0);
         for (int i = 0; i < rows; i++)
         {
-            float y = p.y + 60f * S + i * 38f * S;
+            float y = p.y + 60f * S + i * 34f * S;
             Rect chip = new Rect(p.x + 50f * S, y, 150f * S, 30f * S);
             UIKit.Box(new Rect(chip.x - 2f * S, chip.y - 2f * S, chip.width + 4f * S, chip.height + 4f * S), new Color(UIKit.Gold.r, UIKit.Gold.g, UIKit.Gold.b, 0.9f));
             UIKit.Box(chip, new Color(0.93f, 0.93f, 0.96f));
@@ -151,19 +153,21 @@ public static class MenuScreens
         return UIKit.Button(new Rect(p.center.x - 115f * S, p.yMax - 78f * S, 230f * S, 52f * S), "VOLVER", UIKit.Blue);
     }
 
-    // ------------------------------------------------------------ elección de equipo (tarjetas con escudo)
-    // Devuelve: 0 Millonarios, 1 Nacional, 2 solo mirar, -2 volver, -3 nada todavía
+    // ------------------------------------------------------------ JUGAR: elegir equipo y duración del partido
+    static int selTeam = -1;
+    public static void ResetSelection() { selTeam = -1; }
+
+    // Devuelve: 0 Millonarios, 1 Nacional (con JUGAR), 2 solo mirar, -2 volver, -3 nada todavía
     public static int TeamSelect(bool showBack)
     {
-        float S = UIKit.S;
+        float S = UIKit.S, W = Screen.width;
         int result = -3;
         Dim(0.55f);
-        float cw = 400f * S, ch = 420f * S, gap = 44f * S;
-        float x0 = (Screen.width - (cw * 2f + gap)) * 0.5f, y0 = (Screen.height - ch) * 0.5f - 24f * S;
+        UIKit.Outline(new Rect(0f, 20f * S, W, 64f * S), "ELIGE TU EQUIPO", 46, Color.white, new Color(0.05f, 0.07f, 0.14f));
+        UIKit.Divider(W * 0.5f, 90f * S, 360f * S, UIKit.Gold);
 
-        UIKit.Outline(new Rect(0f, y0 - 92f * S, Screen.width, 60f * S), "ELIGE TU EQUIPO", 46, Color.white, new Color(0.05f, 0.07f, 0.14f));
-        UIKit.Divider(Screen.width * 0.5f, y0 - 24f * S, 360f * S, UIKit.Gold);
-
+        float cw = 380f * S, ch = 330f * S, gap = 40f * S;
+        float x0 = (W - (cw * 2f + gap)) * 0.5f, y0 = 112f * S;
         string[] sub = { "BOGOTÁ · EL EMBAJADOR", "MEDELLÍN · EL VERDOLAGA" };
         string[] desc =
         {
@@ -175,22 +179,52 @@ public static class MenuScreens
             Rect card = new Rect(x0 + t * (cw + gap), y0, cw, ch);
             bool hot;
             float a = UIKit.HoverAnim(card, 500 + t, out hot);
+            bool sel = selTeam == t;
             Matrix4x4 saved = GUI.matrix;
-            GUIUtility.ScaleAroundPivot(Vector2.one * (1f + 0.035f * a), card.center);
+            GUIUtility.ScaleAroundPivot(Vector2.one * (1f + 0.03f * a + (sel ? 0.025f : 0f)), card.center);
             Color tc = UIKit.TeamColor(t);
             UIKit.Panel(card);
-            UIKit.Gradient(new Rect(card.x + 16f * S, card.y + 16f * S, card.width - 32f * S, 250f * S),
-                           new Color(tc.r * 1.4f, tc.g * 1.4f, tc.b * 1.4f, 0.55f + 0.2f * a), new Color(tc.r, tc.g, tc.b, 0f));
-            UIKit.DrawCrest(new Rect(card.center.x - 80f * S, card.y + 32f * S, 160f * S, 160f * S), t, 1f);
-            UIKit.Outline(new Rect(card.x, card.y + 198f * S, card.width, 50f * S), UIKit.TeamName(t), 38, Color.white, new Color(tc.r * 0.4f, tc.g * 0.4f, tc.b * 0.4f));
-            UIKit.Text(new Rect(card.x, card.y + 246f * S, card.width, 26f * S), sub[t], 16, UIKit.Gold);
-            UIKit.Text(new Rect(card.x + 36f * S, card.y + 276f * S, card.width - 72f * S, 52f * S), desc[t], 15, new Color(1f, 1f, 1f, 0.8f), TextAnchor.UpperCenter, false, true, true);
-            if (UIKit.Button(new Rect(card.x + 56f * S, card.yMax - 76f * S, card.width - 112f * S, 52f * S), "JUGAR", new Color(tc.r * 1.5f, tc.g * 1.5f, tc.b * 1.5f))) result = t;
+            UIKit.Gradient(new Rect(card.x + 16f * S, card.y + 16f * S, card.width - 32f * S, 215f * S),
+                           new Color(tc.r * 1.4f, tc.g * 1.4f, tc.b * 1.4f, 0.5f + 0.2f * a + (sel ? 0.15f : 0f)), new Color(tc.r, tc.g, tc.b, 0f));
+            UIKit.DrawCrest(new Rect(card.center.x - 66f * S, card.y + 28f * S, 132f * S, 132f * S), t, 1f);
+            UIKit.Outline(new Rect(card.x, card.y + 164f * S, card.width, 46f * S), UIKit.TeamName(t), 34, Color.white, new Color(tc.r * 0.4f, tc.g * 0.4f, tc.b * 0.4f));
+            UIKit.Text(new Rect(card.x, card.y + 208f * S, card.width, 24f * S), sub[t], 15, UIKit.Gold);
+            UIKit.Text(new Rect(card.x + 34f * S, card.y + 238f * S, card.width - 68f * S, 48f * S), desc[t], 14, new Color(1f, 1f, 1f, 0.8f), TextAnchor.UpperCenter, false, true, true);
+            if (sel)
+            {
+                UIKit.Corners(new Rect(card.x + 4f * S, card.y + 4f * S, card.width - 8f * S, card.height - 8f * S), UIKit.Gold, 34f * S, 4f * S);
+                Rect rb = new Rect(card.center.x - 80f * S, card.yMax - 40f * S, 160f * S, 30f * S);
+                UIKit.Round(rb, UIKit.Gold);
+                UIKit.Text(rb, "ELEGIDO", 16, new Color(0.15f, 0.1f, 0.02f), TextAnchor.MiddleCenter, true, false);
+            }
+            else UIKit.Text(new Rect(card.x, card.yMax - 40f * S, card.width, 30f * S), "CLIC PARA ELEGIR", 14, new Color(1f, 1f, 1f, 0.55f + 0.3f * a), TextAnchor.MiddleCenter, false);
+            if (GUI.Button(card, GUIContent.none, GUIStyle.none)) { selTeam = t; if (GameAudio.I != null) GameAudio.I.UiClick(); }
             GUI.matrix = saved;
         }
-        float by = y0 + ch + 36f * S;
-        if (UIKit.Button(new Rect(Screen.width * 0.5f - (showBack ? 250f : 125f) * S, by, 240f * S, 50f * S), "SOLO MIRAR", UIKit.Slate, 20)) result = 2;
-        if (showBack && UIKit.Button(new Rect(Screen.width * 0.5f + 10f * S, by, 240f * S, 50f * S), "VOLVER", UIKit.Red, 20)) result = -2;
+
+        // duración del partido
+        Rect dp = new Rect(W * 0.5f - 310f * S, y0 + ch + 20f * S, 620f * S, 96f * S);
+        UIKit.Panel(dp);
+        UIKit.Text(new Rect(dp.x, dp.y + 12f * S, dp.width, 22f * S), "DURACIÓN DEL PARTIDO", 15, UIKit.Gold);
+        float pw = 124f * S, pg = 12f * S;
+        float px = dp.center.x - (pw * 4f + pg * 3f) * 0.5f;
+        for (int i = 0; i < minuteOptions.Length; i++)
+        {
+            bool on = GameSettings.MatchMinutes == minuteOptions[i];
+            if (UIKit.Button(new Rect(px + i * (pw + pg), dp.y + 40f * S, pw, 44f * S), minuteOptions[i] + " min", on ? new Color(0.95f, 0.72f, 0.1f) : UIKit.Slate, 19))
+                GameSettings.MatchMinutes = minuteOptions[i];
+        }
+
+        // acciones
+        float by = dp.yMax + 20f * S;
+        bool can = selTeam >= 0;
+        if (UIKit.Button(new Rect(W * 0.5f - 140f * S, by, 280f * S, 62f * S), can ? "JUGAR" : "ELIGE UN EQUIPO", UIKit.Green, can ? 30 : 20, can))
+        {
+            GameSettings.Save();
+            result = selTeam;
+        }
+        if (UIKit.Button(new Rect(W * 0.5f - 140f * S - 224f * S, by + 6f * S, 208f * S, 50f * S), "SOLO MIRAR", UIKit.Slate, 18)) { GameSettings.Save(); result = 2; }
+        if (showBack && UIKit.Button(new Rect(W * 0.5f + 140f * S + 16f * S, by + 6f * S, 208f * S, 50f * S), "VOLVER", UIKit.Red, 18)) result = -2;
         return result;
     }
 }

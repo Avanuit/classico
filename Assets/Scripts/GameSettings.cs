@@ -102,6 +102,7 @@ public class ScreenOverlay : MonoBehaviour
     void OnLoaded(Scene s, LoadSceneMode m)
     {
         baseIntensity.Clear();
+        StadiumLighting.Apply();
         baseAmbient = RenderSettings.ambientIntensity;
         dirty = true;
         FadeFromBlack(0.7f);

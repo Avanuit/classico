@@ -119,6 +119,7 @@ public class Fx : MonoBehaviour
 
     public static void Explosion(Vector3 p, float radius)
     {
+        FlagCloth.Explosion(p, radius);
         if (I == null) return;
         if (PlayerController.I != null)
         {

@@ -89,6 +89,7 @@ public class MatchManager : MonoBehaviour
         if (GetComponent<Fx>() == null) gameObject.AddComponent<Fx>();
         if (GetComponent<WeaponTuning>() == null) gameObject.AddComponent<WeaponTuning>();
         if (GetComponent<PickupSpawner>() == null) gameObject.AddComponent<PickupSpawner>();
+        if (GetComponent<AnimTunerHUD>() == null) gameObject.AddComponent<AnimTunerHUD>();
         if (GameSession.HasChoice) StartMatch(GameSession.Team); else ShowMenu();
     }
 
@@ -119,7 +120,7 @@ public class MatchManager : MonoBehaviour
             case MatchState.Playing: UpdatePlaying(); break;
             case MatchState.SetPiece: UpdateSetPiece(); break;
             case MatchState.Intro: UpdateIntro(); break;
-            case MatchState.Menu: Ball.Rotate(new Vector3(18f, 50f, 7f) * Time.deltaTime, Space.World); break;
+            case MatchState.Menu: break;
             case MatchState.Goal:
                 goalTimer -= Time.deltaTime;
                 if (goalTimer <= 0f) BeginKickOff(PickKickoffTeam(concedingTeam));
@@ -179,8 +180,8 @@ public class MatchManager : MonoBehaviour
             {
                 PlayerAI p = list[i];
                 if (Time.time < p.noControlUntil || p.IsDead || !p.CanTouchBall) continue;
-                float radius = p.isGoalkeeper ? 1.9f : 1.0f;
-                float maxH = p.isGoalkeeper ? 2.4f : 1.2f;
+                float radius = p.isGoalkeeper ? (p.IsDiving ? 2.3f : 1.9f) : 1.0f;     // estirado llega más lejos
+                float maxH = p.isGoalkeeper ? (p.IsDiving ? 2.6f : 2.4f) : 1.2f;
                 float dist = Flat(p.transform.position - Ball.position).magnitude;
                 if (dist < radius && Ball.position.y < maxH && dist < bestD) { best = p; bestD = dist; }
             }
@@ -196,6 +197,7 @@ public class MatchManager : MonoBehaviour
         {
             float r = Random.value;
             float beaten = 0.55f * (1f - keeperSaveSkill) + 0.15f;
+            if (p.IsDiving) beaten *= 0.5f;        // la estirada ataja más (y más rechaces)
             if (r < beaten)                       // batido: no la toca
             {
                 p.noControlUntil = Time.time + 0.9f;
@@ -218,8 +220,25 @@ public class MatchManager : MonoBehaviour
         HolderSince = Time.time;
         LastTouchTeam = p.teamId;
         PassTarget = null;
+        float incoming = BallRb.velocity.magnitude;
         BallRb.velocity = Vector3.ClampMagnitude(BallRb.velocity, 4f) * 0.3f;
-        p.OnGotBall();
+        p.OnGotBall(incoming);
+    }
+
+    // barrida (tecla E o IA): 75% se lleva el balón y el rival tropieza
+    public bool SlideTackle(PlayerAI tackler)
+    {
+        if (Holder == null || Holder.teamId == tackler.teamId || Holder.isGoalkeeper) return false;
+        if (Random.value > 0.75f) return false;
+        PlayerAI loser = Holder;
+        loser.noControlUntil = Time.time + 1.4f;
+        loser.Trip();
+        Holder = null; PassTarget = null;
+        LastTouchTeam = tackler.teamId;
+        tackler.noControlUntil = Time.time + 0.25f;
+        BallRb.velocity = tackler.FaceDir * 5f + Vector3.up * 0.5f;
+        if (GameAudio.I != null) GameAudio.I.Kick(6f, Ball.position);
+        return true;
     }
 
     public void NotifyKick(PlayerAI p)
@@ -367,9 +386,9 @@ public class MatchManager : MonoBehaviour
         BallRb.velocity = Vector3.zero;
         BallRb.angularVelocity = Vector3.zero;
         BallRb.isKinematic = true;
-        if (!ballScaled) { ballScale = Ball.localScale; ballScaled = true; }
-        Ball.localScale = ballScale * 5f;                 // balón grande girando en el menú
-        Ball.position = new Vector3(0f, 1.4f, 0f);
+        Ball.position = new Vector3(0f, 0.12f, 0f);
+        MenuShowcase.Begin(this);                          // poses congeladas + cámara que recorre a los jugadores
+        MainMenuUI.OnEnterMenu();
         MatchHUD.Show("", Color.black, 0f);
     }
 
@@ -392,7 +411,7 @@ public class MatchManager : MonoBehaviour
     static string Label(PlayerAI p)
     {
         if (PlayerController.I != null && PlayerController.I.Controlled == p) return "TÚ";
-        return (p.teamId == 0 ? "MIL " : "NAC ") + p.index;
+        return p.DisplayName;
     }
 
     bool IsUser(PlayerAI p) { return PlayerController.I != null && PlayerController.I.Controlled == p; }
@@ -511,6 +530,8 @@ public class MatchManager : MonoBehaviour
     // ---- intro cinematográfica (lore) + cuenta atrás 3-2-1
     public void BeginIntro()
     {
+        MenuShowcase.End();
+        matchLengthSeconds = GameSettings.MatchMinutes * 60f;        // la duración se elige al darle JUGAR
         SetPaused(false);
         CleanupPodium();
         RestoreBall();
@@ -568,15 +589,12 @@ public class MatchManager : MonoBehaviour
 
     public void ChangeTeam() { ShowMenu(); }
 
+    // el menú principal vive en esta misma escena (con el estadio real de fondo)
     public void GoToMainMenu()
     {
         CleanupPodium();
-        if (GameSession.MenuAvailable)
-        {
-            GameSession.HasChoice = false;
-            ScreenOverlay.LoadScene(GameSession.MenuScene);
-        }
-        else ShowMenu();
+        GameSession.HasChoice = false;
+        ShowMenu();
     }
 
     void BeginSetPiece(SetPieceType type, int team, Vector3 spot, string label, PlayerAI takerOverride)
@@ -673,6 +691,7 @@ public class MatchManager : MonoBehaviour
         if (SetType == SetPieceType.KickOff && GameAudio.I != null) GameAudio.I.Whistle(1, true);
         GiveBall(Taker);
         bool lob = aerial || SetType == SetPieceType.ThrowIn || SetType == SetPieceType.Corner;
+        if (SetType == SetPieceType.ThrowIn) Taker.nextKickAnim = (int)AnimKey.ThrowIn;
         if (SetType == SetPieceType.ThrowIn) power = Mathf.Min(power, 0.45f);   // un saque de banda no llega a 60 m
         Taker.UserKick(dir, power, lob);
     }

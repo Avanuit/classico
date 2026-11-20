@@ -214,6 +214,7 @@ public class PlayerCombat : MonoBehaviour
             if (pc != null) head = (h.point.y - pc.AI.LastGroundY) > pc.AI.playerHeight * 0.82f;
         }
         Fx.Tracer(origin, end, new Color(1f, 0.9f, 0.55f, 0.9f));
+        FlagCloth.Shot(origin, end);                              // las banderas reaccionan al disparo
         if (victim != null)
         {
             Fx.Impact(end, normal, new Color(0.8f, 0.1f, 0.1f, 0.9f));
@@ -483,7 +484,120 @@ public class PlayerCombat : MonoBehaviour
         weaponObj = WeaponModels.Build(want, out muzzleT);
     }
 
+    // ============================================================ AGARRE NATURAL: el arma se apoya en el cuerpo y las MANOS van al arma
+    //  AK-47: culata en el hombro derecho, mano derecha en la empuñadura, izquierda bajo el guardamanos.
+    //  Glock: brazos extendidos al frente, derecha en la empuñadura, izquierda envolviendo a la derecha.
+    //  Granada: en la mano derecha, a la altura del pecho, lista para lanzar.
+    //  Los brazos se resuelven con IK de dos huesos (hombro → codo → mano) después de la animación.
+    Animator ikAnim;
+    bool ikTried, ikOk;
+    Transform rUA, rLA, rH, lUA, lLA, lH;
+
+    void InitIK()
+    {
+        ikTried = true;
+        ikAnim = GetComponentInChildren<Animator>();
+        if (ikAnim == null || !ikAnim.isHuman) return;
+        rUA = ikAnim.GetBoneTransform(HumanBodyBones.RightUpperArm);
+        rLA = ikAnim.GetBoneTransform(HumanBodyBones.RightLowerArm);
+        rH = ikAnim.GetBoneTransform(HumanBodyBones.RightHand);
+        lUA = ikAnim.GetBoneTransform(HumanBodyBones.LeftUpperArm);
+        lLA = ikAnim.GetBoneTransform(HumanBodyBones.LeftLowerArm);
+        lH = ikAnim.GetBoneTransform(HumanBodyBones.LeftHand);
+        ikOk = rUA != null && rLA != null && rH != null && lUA != null && lLA != null && lH != null;
+    }
+
+    // IK analítico: coloca el codo en el plano del "polo" y apunta antebrazo y mano al objetivo
+    static void SolveArm(Transform a, Transform b, Transform c, Vector3 target, Vector3 pole)
+    {
+        Vector3 ap = a.position;
+        float la = (b.position - ap).magnitude, lb = (c.position - b.position).magnitude;
+        Vector3 to = target - ap;
+        float d = Mathf.Clamp(to.magnitude, Mathf.Abs(la - lb) + 0.01f, la + lb - 0.002f);
+        Vector3 dir = to.sqrMagnitude > 1e-6f ? to.normalized : a.forward;
+        Vector3 pd = Vector3.ProjectOnPlane(pole - ap, dir);
+        if (pd.sqrMagnitude < 1e-6f) pd = Vector3.ProjectOnPlane(Vector3.down, dir);
+        pd.Normalize();
+        float x = (la * la - lb * lb + d * d) / (2f * d);
+        float h = Mathf.Sqrt(Mathf.Max(0f, la * la - x * x));
+        Vector3 elbow = ap + dir * x + pd * h;
+        a.rotation = Quaternion.FromToRotation(b.position - ap, elbow - ap) * a.rotation;
+        Vector3 wrist = ap + dir * d;
+        b.rotation = Quaternion.FromToRotation(c.position - b.position, wrist - b.position) * b.rotation;
+    }
+
+    // orienta la mano: dedos (eje +Y del hueso) hacia 'fingers', dorso según 'back' + giro ajustable
+    static void OrientHand(Transform h, Vector3 fingers, Vector3 back, float roll)
+    {
+        back = Vector3.ProjectOnPlane(back, fingers);
+        if (back.sqrMagnitude < 1e-6f) return;
+        h.rotation = Quaternion.LookRotation(back.normalized, fingers.normalized) * Quaternion.Euler(0f, roll, 0f);
+    }
+
     void PositionWeapon(ItemType t)
+    {
+        if (!ikTried) InitIK();
+        if (!ikOk || IsDead) { PositionWeaponSimple(t); return; }
+
+        WeaponTuning tune = WeaponTuning.I;
+        Vector3 fwd = AI.FaceDir; fwd.y = 0f;
+        if (fwd.sqrMagnitude < 0.01f) fwd = transform.forward;
+        fwd.Normalize();
+        Vector3 right = Vector3.Cross(Vector3.up, fwd);
+        Vector3 sR = rUA.position, sL = lUA.position;
+        Vector3 mid = (sR + sL) * 0.5f;
+
+        // hacia dónde apunta: al objetivo si apunta/dispara; si no, "posición baja" (cañón un poco abajo)
+        Vector3 dir;
+        if (aimActive && (aimPoint - mid).sqrMagnitude > 1f) dir = (aimPoint - mid).normalized;
+        else dir = (fwd + Vector3.down * (t == ItemType.AK47 ? 0.35f : 0.45f)).normalized;
+        if (Vector3.Dot(dir, fwd) < 0.2f) dir = (dir + fwd).normalized;     // nunca apunta hacia atrás del cuerpo
+        Quaternion rot = Quaternion.LookRotation(dir, Vector3.up);
+        Vector3 wr = rot * Vector3.right, wu = rot * Vector3.up;
+
+        Vector3 pos;
+        if (t == ItemType.AK47)
+        {
+            // la cantonera (punto local 0,-0.036,-0.475) va al hueco del hombro derecho
+            Vector3 pocket = sR + (mid - sR) * 0.3f + fwd * 0.06f + Vector3.down * 0.04f;
+            pos = pocket - rot * new Vector3(0f, -0.036f, -0.475f);
+        }
+        else if (t == ItemType.Glock)
+            pos = mid + dir * 0.48f + Vector3.down * 0.06f + right * 0.03f - rot * new Vector3(0f, -0.045f, -0.055f);
+        else
+            pos = sR + fwd * 0.28f + Vector3.down * 0.3f + right * 0.02f;
+        weaponObj.transform.position = pos;
+        weaponObj.transform.rotation = t == ItemType.Grenade ? Quaternion.LookRotation(fwd) : rot;
+
+        float rr = tune != null ? tune.rightHandRoll : 0f, lr = tune != null ? tune.leftHandRoll : 0f;
+        Vector3 down = Vector3.down;
+        if (t == ItemType.AK47)
+        {
+            Vector3 gripR = pos + rot * new Vector3(0.008f, -0.07f, -0.105f);
+            Vector3 gripL = pos + rot * new Vector3(-0.012f, -0.045f, 0.2f);
+            SolveArm(rUA, rLA, rH, gripR, sR + right * 0.45f + down * 0.25f);        // codo derecho afuera
+            SolveArm(lUA, lLA, lH, gripL, sL + down * 0.6f + right * 0.1f);          // codo izquierdo bajo el arma
+            OrientHand(rH, rot * new Vector3(-0.2f, -0.35f, 0.9f), wr, rr);
+            OrientHand(lH, rot * new Vector3(0.55f, 0.6f, 0.3f), -wu, lr);
+        }
+        else if (t == ItemType.Glock)
+        {
+            Vector3 gripR = pos + rot * new Vector3(0.006f, -0.035f, -0.07f);
+            Vector3 gripL = pos + rot * new Vector3(-0.028f, -0.05f, -0.06f);
+            SolveArm(rUA, rLA, rH, gripR, sR + right * 0.3f + down * 0.5f);
+            SolveArm(lUA, lLA, lH, gripL, sL - right * 0.3f + down * 0.5f);
+            OrientHand(rH, rot * new Vector3(-0.15f, -0.35f, 0.92f), wr, rr);
+            OrientHand(lH, rot * new Vector3(0.45f, -0.3f, 0.85f), -wr, lr);
+        }
+        else
+        {
+            Vector3 g = weaponObj.transform.position;
+            SolveArm(rUA, rLA, rH, g + right * 0.045f - fwd * 0.03f + down * 0.02f, sR + right * 0.35f + down * 0.4f - fwd * 0.2f);
+            OrientHand(rH, (fwd - right * 0.4f + Vector3.up * 0.2f).normalized, right, rr);
+        }
+    }
+
+    void PositionWeaponSimple(ItemType t)
     {
         Vector3 chest = ChestPos();
         Vector3 dir = aimActive ? (aimPoint - chest) : new Vector3(AI.FaceDir.x, -0.05f, AI.FaceDir.z);

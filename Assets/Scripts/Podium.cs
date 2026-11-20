@@ -118,7 +118,7 @@ public class Podium : MonoBehaviour
 
             Entry e = new Entry();
             e.ai = ai; e.place = i + 1; e.kills = pc.kills; e.deaths = pc.deaths;
-            e.label = (ai.teamId == 0 ? "MILLONARIOS" : "NACIONAL") + " #" + ai.index;
+            e.label = ai.DisplayName + (ai.shirtNumber.Length > 0 ? "  #" + ai.shirtNumber : "") + "  ·  " + (ai.teamId == 0 ? "MIL" : "NAC");
             Entries.Add(e);
         }
 
@@ -137,9 +137,10 @@ public class Podium : MonoBehaviour
         m.BallRb.velocity = Vector3.zero;
         m.BallRb.angularVelocity = Vector3.zero;
         m.BallRb.isKinematic = true;
-        m.Ball.position = new Vector3(Center.x - 1.7f, gy + 0.12f, 0f);
+        m.Ball.position = new Vector3(Center.x - 0.45f, gy + heights[0] + 0.12f, 0.35f);   // bajo el pie del campeón, sin tapar las tarimas
 
-        confetti = Fx.CreateConfetti(new Vector3(Center.x, gy + 9f, 0f), new Vector3(10f, 8f, 0.2f), 90f, 7f);
+        // confeti solo DETRÁS y encima de los jugadores (la cámara está del lado -X): no tapa a nadie
+        confetti = Fx.CreateConfetti(new Vector3(Center.x + 1.6f, gy + 8f, 0f), new Vector3(3.2f, 7.5f, 0.2f), 70f, 7f);
     }
 
     void Restore()
